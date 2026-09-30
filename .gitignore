@@ -50,3 +50,7 @@ docs/*.md
 !docs/CANONICAL-DATA.md
 !docs/TEST-AND-ACCEPTANCE.md
 evidence/discovery/
+
+# --- ALL internal markdown: kept locally, only README.md is published ---
+*.md
+!README.md
