@@ -27,3 +27,26 @@ secrets.yaml
 # --- OS noise ---
 .DS_Store
 Thumbs.db
+
+# --- internal planning docs: kept locally, not part of the submission ---
+BUILD-*.md
+FORM-FILL.md
+ROADMAP.md
+SOURCE-MANIFEST.txt
+START-HERE.md
+SUBMISSION.md
+TABULA-CONTRACT.md
+TABULA-MANIFEST.md
+docs/architecture.md
+docs/blueprint.md
+docs/concept.md
+docs/external-apis.md
+docs/harden.md
+docs/jev-workflow-*.md
+docs/mvp-from-jev-builder.md
+docs/research-ledger.md
+docs/stack-feasibility.md
+docs/*.md
+!docs/CANONICAL-DATA.md
+!docs/TEST-AND-ACCEPTANCE.md
+evidence/discovery/
