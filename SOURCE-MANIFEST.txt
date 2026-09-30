@@ -1,0 +1,40 @@
+# Source manifest — Tabula Rerum standalone folder
+#
+# Generated 2026-09-25. Maps each doc here to the corpus file it was copied from.
+# Updated 2026-09-26 by the documentation-repair phase.
+#
+# COLUMNS
+#   SOURCE-SHA256  hash of the ORIGINAL corpus file in build/ideas/ — the provenance anchor.
+#                  This must never change; it is what proves which corpus doc this came from.
+#   DEST-SHA256    hash of the file as it exists here NOW.
+#                  Differs from SOURCE where cross-references were rewritten, or where this
+#                  folder's copy was deliberately corrected. Verified 2026-09-26.
+#
+# STATUS
+#   =         destination is byte-identical to the source
+#   refs      cross-references were rewritten during the standalone extraction
+#   edited    corrected in place on 2026-09-26 (see docs/ and ../../docs/api.md)
+#
+FILE                               SOURCE                                    SOURCE-SHA256  DEST-SHA256    STATUS
+concept.md                         build/ideas/tabula/concept.md               8718297445d53ab9  8718297445d53ab9  =
+blueprint.md                       build/ideas/tabula/blueprint.md             712f1b5c8f7470db  712f1b5c8f7470db  =
+architecture.md                    build/ideas/tabula/architecture.md          0f3d42628c48eebd  a93ada1bcf890526  refs, edited
+stack-feasibility.md               build/ideas/tabula/stack-feasibility.md    a79a70e71fd4a12a  a79a70e71fd4a12a  =
+mvp-from-jev-builder.md            build/ideas/tabula/MVP-from-jev-builder.md  8e60b31e459498f4  1f4a01b1690e5ac9  edited
+external-apis.md                   build/ideas/tabula/external-apis.md         565a04ba5e5bb99f  eb4860b30a3dfa6f  edited
+jev-workflow-adaptation.md         build/ideas/tabula/jev-workflow-adaptation.md  2d7c0572202eaaf6  aad723498e3e3631  refs
+jev-workflow-ledger.md             build/ideas/tabula/jev-workflow-ledger.md   1d19e0120fc1c220  bda1282889c365a6  refs
+research-ledger.md                 build/ideas/tabula/research-ledger.md       fa75bf53ca6b98fb  fa75bf53ca6b98fb  =
+harden.md                          build/ideas/HARDEN-tabula.md                acc86b0bf8b1df4c  acc86b0bf8b1df4c  =
+#
+# 2026-09-26 EDIT LOG (documentation repair; no product behaviour changed)
+#   external-apis.md        keyless base corrected from /trial-pro-api to /public-api; added the
+#                          confirmed-keyless historical endpoints and a pointer to docs/api.md.
+#   mvp-from-jev-builder.md checklist item clarified: upstream ships no LICENSE/NOTICE file, so
+#                          the canonical Apache-2.0 text must be fetched from apache.org.
+#   architecture.md         same LICENSE/NOTICE clarification added to the compliance line.
+#
+# NOTE: the source corpus under build/ideas/tabula/ still carries the pre-correction text. It is
+# retained unmodified as provenance. Where the two disagree, THIS FOLDER and ../../docs/api.md are
+# authoritative; build/ideas/ is superseded and is a candidate for archiving (blocked by the OUT-6
+# guard — see ../../archive/README.md).

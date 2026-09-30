@@ -1,0 +1,29 @@
+# --- tool caches (present in this workspace, never belong in a submission) ---
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.omx/
+__pycache__/
+*.pyc
+*.pyo
+
+# --- agent/editor scratch that leaked in during research ---
+*.html
+*.cc
+*.rst
+CHANGELOG*.md
+pyproject.toml*
+requirements*.txt
+setup.py
+setup.cfg
+
+# --- credentials: never commit these ---
+.env
+.env.*
+*.pem
+*.key
+secrets.yaml
+
+# --- OS noise ---
+.DS_Store
+Thumbs.db
