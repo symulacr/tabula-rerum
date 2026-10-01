@@ -1,0 +1,465 @@
+{
+ "kind": "recorded-capture",
+ "source": "keyless public API, no X-CMC_PRO_API_KEY header sent",
+ "path": "/public-api/v1/altcoin-season-index/historical",
+ "params": {
+  "timeframe": "90d"
+ },
+ "captured_utc": "2026-10-01T02:47:51Z",
+ "note": "data is an OBJECT {timeframe, points[]} -- the only endpoint of this shape. Every other param (limit, time_start, time_end, interval) is SILENTLY IGNORED; only `timeframe` is honoured. Verified byte-identical with and without them.",
+ "data": {
+  "timeframe": "90d",
+  "points": [
+   {
+    "timestamp": "2026-07-04T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 914395902197.26
+   },
+   {
+    "timestamp": "2026-07-05T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 919306914610.05
+   },
+   {
+    "timestamp": "2026-07-06T00:00:00Z",
+    "altcoin_index": 48,
+    "altcoin_marketcap": 921180611490.75
+   },
+   {
+    "timestamp": "2026-07-07T00:00:00Z",
+    "altcoin_index": 46,
+    "altcoin_marketcap": 921109146122.94
+   },
+   {
+    "timestamp": "2026-07-08T00:00:00Z",
+    "altcoin_index": 45,
+    "altcoin_marketcap": 910415993877.29
+   },
+   {
+    "timestamp": "2026-07-09T00:00:00Z",
+    "altcoin_index": 53,
+    "altcoin_marketcap": 900069805025.99
+   },
+   {
+    "timestamp": "2026-07-10T00:00:00Z",
+    "altcoin_index": 52,
+    "altcoin_marketcap": 901324065960.6
+   },
+   {
+    "timestamp": "2026-07-11T00:00:00Z",
+    "altcoin_index": 53,
+    "altcoin_marketcap": 912743022103.95
+   },
+   {
+    "timestamp": "2026-07-12T00:00:00Z",
+    "altcoin_index": 54,
+    "altcoin_marketcap": 908294168933.69
+   },
+   {
+    "timestamp": "2026-07-13T00:00:00Z",
+    "altcoin_index": 58,
+    "altcoin_marketcap": 910339086107.95
+   },
+   {
+    "timestamp": "2026-07-14T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 897264497850.89
+   },
+   {
+    "timestamp": "2026-07-15T00:00:00Z",
+    "altcoin_index": 44,
+    "altcoin_marketcap": 924206750520.17
+   },
+   {
+    "timestamp": "2026-07-16T00:00:00Z",
+    "altcoin_index": 47,
+    "altcoin_marketcap": 926213708056.83
+   },
+   {
+    "timestamp": "2026-07-17T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 910451553374.16
+   },
+   {
+    "timestamp": "2026-07-18T00:00:00Z",
+    "altcoin_index": 50,
+    "altcoin_marketcap": 908541171774.39
+   },
+   {
+    "timestamp": "2026-07-19T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 911289000113.49
+   },
+   {
+    "timestamp": "2026-07-20T00:00:00Z",
+    "altcoin_index": 50,
+    "altcoin_marketcap": 912886257906.47
+   },
+   {
+    "timestamp": "2026-07-21T00:00:00Z",
+    "altcoin_index": 52,
+    "altcoin_marketcap": 920295408413.85
+   },
+   {
+    "timestamp": "2026-07-22T00:00:00Z",
+    "altcoin_index": 50,
+    "altcoin_marketcap": 926607840274.61
+   },
+   {
+    "timestamp": "2026-07-23T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 923670459633.65
+   },
+   {
+    "timestamp": "2026-07-24T00:00:00Z",
+    "altcoin_index": 53,
+    "altcoin_marketcap": 908739483755.66
+   },
+   {
+    "timestamp": "2026-07-25T00:00:00Z",
+    "altcoin_index": 55,
+    "altcoin_marketcap": 903580413476.43
+   },
+   {
+    "timestamp": "2026-07-26T00:00:00Z",
+    "altcoin_index": 55,
+    "altcoin_marketcap": 908078915792.56
+   },
+   {
+    "timestamp": "2026-07-27T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 923418278692.27
+   },
+   {
+    "timestamp": "2026-07-28T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 901633501761.1
+   },
+   {
+    "timestamp": "2026-07-29T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 906735957718.29
+   },
+   {
+    "timestamp": "2026-07-30T00:00:00Z",
+    "altcoin_index": 53,
+    "altcoin_marketcap": 903662972135.02
+   },
+   {
+    "timestamp": "2026-07-31T00:00:00Z",
+    "altcoin_index": 54,
+    "altcoin_marketcap": 909744026358.07
+   },
+   {
+    "timestamp": "2026-08-01T00:00:00Z",
+    "altcoin_index": 52,
+    "altcoin_marketcap": 897627417484.9
+   },
+   {
+    "timestamp": "2026-08-02T00:00:00Z",
+    "altcoin_index": 57,
+    "altcoin_marketcap": 892152472247.65
+   },
+   {
+    "timestamp": "2026-08-03T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 903865019003.54
+   },
+   {
+    "timestamp": "2026-08-04T00:00:00Z",
+    "altcoin_index": 45,
+    "altcoin_marketcap": 901673753775.07
+   },
+   {
+    "timestamp": "2026-08-05T00:00:00Z",
+    "altcoin_index": 43,
+    "altcoin_marketcap": 902107685895.98
+   },
+   {
+    "timestamp": "2026-08-06T00:00:00Z",
+    "altcoin_index": 37,
+    "altcoin_marketcap": 906877314001.91
+   },
+   {
+    "timestamp": "2026-08-07T00:00:00Z",
+    "altcoin_index": 36,
+    "altcoin_marketcap": 902305601374.61
+   },
+   {
+    "timestamp": "2026-08-08T00:00:00Z",
+    "altcoin_index": 37,
+    "altcoin_marketcap": 903678377021.73
+   },
+   {
+    "timestamp": "2026-08-09T00:00:00Z",
+    "altcoin_index": 38,
+    "altcoin_marketcap": 910442871204.69
+   },
+   {
+    "timestamp": "2026-08-10T00:00:00Z",
+    "altcoin_index": 40,
+    "altcoin_marketcap": 907753484587.74
+   },
+   {
+    "timestamp": "2026-08-11T00:00:00Z",
+    "altcoin_index": 41,
+    "altcoin_marketcap": 902088135492.42
+   },
+   {
+    "timestamp": "2026-08-12T00:00:00Z",
+    "altcoin_index": 46,
+    "altcoin_marketcap": 906038264927.93
+   },
+   {
+    "timestamp": "2026-08-13T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 902007620555.77
+   },
+   {
+    "timestamp": "2026-08-14T00:00:00Z",
+    "altcoin_index": 50,
+    "altcoin_marketcap": 904471109074.96
+   },
+   {
+    "timestamp": "2026-08-15T00:00:00Z",
+    "altcoin_index": 50,
+    "altcoin_marketcap": 901590068526.93
+   },
+   {
+    "timestamp": "2026-08-16T00:00:00Z",
+    "altcoin_index": 47,
+    "altcoin_marketcap": 900200474897.08
+   },
+   {
+    "timestamp": "2026-08-17T00:00:00Z",
+    "altcoin_index": 44,
+    "altcoin_marketcap": 898550831352.5
+   },
+   {
+    "timestamp": "2026-08-18T00:00:00Z",
+    "altcoin_index": 42,
+    "altcoin_marketcap": 906957447232.16
+   },
+   {
+    "timestamp": "2026-08-19T00:00:00Z",
+    "altcoin_index": 40,
+    "altcoin_marketcap": 905724399119.49
+   },
+   {
+    "timestamp": "2026-08-20T00:00:00Z",
+    "altcoin_index": 38,
+    "altcoin_marketcap": 973976774890.21
+   },
+   {
+    "timestamp": "2026-08-21T00:00:00Z",
+    "altcoin_index": 38,
+    "altcoin_marketcap": 1006730346559.99
+   },
+   {
+    "timestamp": "2026-08-22T00:00:00Z",
+    "altcoin_index": 40,
+    "altcoin_marketcap": 1071499099873.12
+   },
+   {
+    "timestamp": "2026-08-23T00:00:00Z",
+    "altcoin_index": 41,
+    "altcoin_marketcap": 1062565968526.27
+   },
+   {
+    "timestamp": "2026-08-24T00:00:00Z",
+    "altcoin_index": 38,
+    "altcoin_marketcap": 1076718796055.67
+   },
+   {
+    "timestamp": "2026-08-25T00:00:00Z",
+    "altcoin_index": 38,
+    "altcoin_marketcap": 1074674205981.07
+   },
+   {
+    "timestamp": "2026-08-26T00:00:00Z",
+    "altcoin_index": 38,
+    "altcoin_marketcap": 1059258710403.29
+   },
+   {
+    "timestamp": "2026-08-27T00:00:00Z",
+    "altcoin_index": 37,
+    "altcoin_marketcap": 1077348684779.69
+   },
+   {
+    "timestamp": "2026-08-28T00:00:00Z",
+    "altcoin_index": 33,
+    "altcoin_marketcap": 1087286585168.34
+   },
+   {
+    "timestamp": "2026-08-29T00:00:00Z",
+    "altcoin_index": 32,
+    "altcoin_marketcap": 1060955576338.0
+   },
+   {
+    "timestamp": "2026-08-30T00:00:00Z",
+    "altcoin_index": 26,
+    "altcoin_marketcap": 1068649842028.84
+   },
+   {
+    "timestamp": "2026-08-31T00:00:00Z",
+    "altcoin_index": 27,
+    "altcoin_marketcap": 1053014922476.42
+   },
+   {
+    "timestamp": "2026-09-01T00:00:00Z",
+    "altcoin_index": 23,
+    "altcoin_marketcap": 1064255961538.23
+   },
+   {
+    "timestamp": "2026-09-02T00:00:00Z",
+    "altcoin_index": 32,
+    "altcoin_marketcap": 1052601319566.52
+   },
+   {
+    "timestamp": "2026-09-03T00:00:00Z",
+    "altcoin_index": 38,
+    "altcoin_marketcap": 1053225751854.73
+   },
+   {
+    "timestamp": "2026-09-04T00:00:00Z",
+    "altcoin_index": 36,
+    "altcoin_marketcap": 1094125311274.73
+   },
+   {
+    "timestamp": "2026-09-05T00:00:00Z",
+    "altcoin_index": 39,
+    "altcoin_marketcap": 1082559617346.22
+   },
+   {
+    "timestamp": "2026-09-06T00:00:00Z",
+    "altcoin_index": 42,
+    "altcoin_marketcap": 1100761965070.39
+   },
+   {
+    "timestamp": "2026-09-07T00:00:00Z",
+    "altcoin_index": 41,
+    "altcoin_marketcap": 1113667057747.45
+   },
+   {
+    "timestamp": "2026-09-08T00:00:00Z",
+    "altcoin_index": 51,
+    "altcoin_marketcap": 1102312674628.86
+   },
+   {
+    "timestamp": "2026-09-09T00:00:00Z",
+    "altcoin_index": 39,
+    "altcoin_marketcap": 1105111130363.02
+   },
+   {
+    "timestamp": "2026-09-10T00:00:00Z",
+    "altcoin_index": 40,
+    "altcoin_marketcap": 1090501843646.15
+   },
+   {
+    "timestamp": "2026-09-11T00:00:00Z",
+    "altcoin_index": 37,
+    "altcoin_marketcap": 1070231730689.71
+   },
+   {
+    "timestamp": "2026-09-12T00:00:00Z",
+    "altcoin_index": 39,
+    "altcoin_marketcap": 1089455563301.64
+   },
+   {
+    "timestamp": "2026-09-13T00:00:00Z",
+    "altcoin_index": 41,
+    "altcoin_marketcap": 1091042976423.85
+   },
+   {
+    "timestamp": "2026-09-14T00:00:00Z",
+    "altcoin_index": 37,
+    "altcoin_marketcap": 1076298721532.96
+   },
+   {
+    "timestamp": "2026-09-15T00:00:00Z",
+    "altcoin_index": 32,
+    "altcoin_marketcap": 1093096030194.95
+   },
+   {
+    "timestamp": "2026-09-16T00:00:00Z",
+    "altcoin_index": 33,
+    "altcoin_marketcap": 1056506405941.19
+   },
+   {
+    "timestamp": "2026-09-17T00:00:00Z",
+    "altcoin_index": 42,
+    "altcoin_marketcap": 1070281883108.74
+   },
+   {
+    "timestamp": "2026-09-18T00:00:00Z",
+    "altcoin_index": 45,
+    "altcoin_marketcap": 1086539081250.07
+   },
+   {
+    "timestamp": "2026-09-19T00:00:00Z",
+    "altcoin_index": 47,
+    "altcoin_marketcap": 1140581672541.5
+   },
+   {
+    "timestamp": "2026-09-20T00:00:00Z",
+    "altcoin_index": 48,
+    "altcoin_marketcap": 1144980157860.72
+   },
+   {
+    "timestamp": "2026-09-21T00:00:00Z",
+    "altcoin_index": 50,
+    "altcoin_marketcap": 1151855398006.7
+   },
+   {
+    "timestamp": "2026-09-22T00:00:00Z",
+    "altcoin_index": 49,
+    "altcoin_marketcap": 1195636182102.66
+   },
+   {
+    "timestamp": "2026-09-23T00:00:00Z",
+    "altcoin_index": 45,
+    "altcoin_marketcap": 1203757650588.59
+   },
+   {
+    "timestamp": "2026-09-24T00:00:00Z",
+    "altcoin_index": 52,
+    "altcoin_marketcap": 1169523496213.13
+   },
+   {
+    "timestamp": "2026-09-25T00:00:00Z",
+    "altcoin_index": 63,
+    "altcoin_marketcap": 1184281192640.77
+   },
+   {
+    "timestamp": "2026-09-26T00:00:00Z",
+    "altcoin_index": 62,
+    "altcoin_marketcap": 1197088973737.78
+   },
+   {
+    "timestamp": "2026-09-27T00:00:00Z",
+    "altcoin_index": 64,
+    "altcoin_marketcap": 1198049996502.31
+   },
+   {
+    "timestamp": "2026-09-28T00:00:00Z",
+    "altcoin_index": 63,
+    "altcoin_marketcap": 1201474136651.28
+   },
+   {
+    "timestamp": "2026-09-29T00:00:00Z",
+    "altcoin_index": 60,
+    "altcoin_marketcap": 1186927299329.71
+   },
+   {
+    "timestamp": "2026-09-30T00:00:00Z",
+    "altcoin_index": 60,
+    "altcoin_marketcap": 1181114493701.71
+   },
+   {
+    "timestamp": "2026-10-01T00:00:00Z",
+    "altcoin_index": 60,
+    "altcoin_marketcap": 1184793979452.44
+   }
+  ]
+ }
+}

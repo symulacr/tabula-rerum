@@ -11,13 +11,16 @@
 ```bash
 python3 run.py          # offline from fixtures — no key, no network
 python3 run.py --live   # live keyless CoinMarketCap
-python3 run.py --test   # 47 tests
+python3 run.py --test   # 99 tests
 bash demo.sh            # reproduce the finding end-to-end
+python3 share_card.py --check   # render the share card and prove it is byte-reproducible
 ```
 
 **Python 3.12, standard library only.** No npm, no bundler, no build step, no third-party runtime
 dependency — enforced by `TestStdlibOnly`, because this environment *has* Flask/pandas/numpy and
 the rule is a discipline, not an accident. Server-rendered inline SVG; no browser in the loop.
+`share_card.py` drives the host's own headless Chrome rather than adding a rasteriser, and
+verifies its output is byte-identical across runs.
 
 ## Endpoints — all keyless, no API key
 
@@ -55,17 +58,27 @@ statistics, outer join for rendering, windows dropped below 95% coverage.
    data is the data the brief doesn't point at.
 2. **Auth failures are masked as transient.** An unrouted path returns `HTTP 200` +
    `error_code 500` + *"The system is busy"* — byte-identical to a real blip, and in conflict
-   with the documented retry-500 guidance. We classify it `UNROUTED` by the absence of `data`.
+   with the documented retry-500 guidance. The client classifies it `UNROUTED` by the absence of
+   `data` and **never retries it**: a typo does not become correct on a second attempt.
 3. **The keyless limit is `1022`**, in no published table. No `Retry-After`, no `X-RateLimit-*`.
-4. **OpenAPI misdeclares F&G `timestamp`** as ISO-8601; the wire value is an epoch string.
+4. **OpenAPI misdeclares F&G `timestamp`** as ISO-8601; the wire value is an epoch **string**.
+   Altcoin Season uses ISO-8601 in the *same field name* — both encodings are handled.
 5. **Constituent schemas differ** between `cmc20` (has `priceUsd`, `units`) and `cmc100` —
    unflagged anywhere.
+6. **Fear & Greed returns newest-first** behind a **1-based `start` offset**; the axis inverts
+   silently if you wire it as-is. Normalised, and pinned by a test.
+7. **Altcoin Season honours only `timeframe`** (`7d`/`30d`/`90d`). `limit`, `time_start`,
+   `time_end` and `interval` are accepted and **silently ignored** — false confidence.
 
 ## Limitations, stated plainly
 
 `CMC20 − CMC100` is near-noise *because* the indices are 99.99% correlated — we show that rather
 than hide it. Composition is **CMC index reconstitution, not market churn**. Fear & Greed is
-Bitcoin-only. `listings/historical`, `quotes/historical` and `ohlcv/historical` are not keyless
-(403/1005), so a keyless build cannot do whole-market churn.
+Bitcoin-only and the vendor notes several of its component inputs are paused. The Altcoin Season
+Index was **redefined**: it is now the share of the top 50 excluding BTC that outperformed BTC
+over 90 days, not the old altcoin/BTC market-cap ratio. `listings/historical`, `quotes/historical`
+and `ohlcv/historical` are **not keyless** (403/1005), so a keyless build cannot do whole-market
+churn. The window is **yours to choose**, and both series rebase to 100 at the window's first
+day — so the mean, sd and percentile describe that window, not the market.
 
 *No investment advice.*

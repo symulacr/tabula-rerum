@@ -729,5 +729,223 @@ class TestHttpSurface(unittest.TestCase):
             self.assertEqual(e.code, 404)
 
 
+class TestSentimentPanel(unittest.TestCase):
+    """P1.1/P1.2: Fear & Greed and Altcoin Season, with the axis bug the fixtures expose."""
+
+    def setUp(self):
+        from tabula.server import build_result, _sentiment_series
+        self._sentiment_series = _sentiment_series
+        self.r = build_result(days=365, offline=True)
+
+    def test_fng_fixture_arrives_newest_first_and_must_be_reversed(self):
+        """D7: the raw fixture is descending. Wiring it as-is inverts the axis silently."""
+        import json
+        raw = json.load(open(ROOT / "evidence" / "fixtures" / "fng_historical.json"))
+        pts = raw["data"] if isinstance(raw, dict) else raw
+        ts = [int(p["timestamp"]) for p in pts]
+        self.assertEqual(ts, sorted(ts, reverse=True),
+                         "fixture is newest-first; if this changes, the normaliser must too")
+        rows = self._sentiment_series(raw, "fng")
+        self.assertTrue(rows, "no F&G rows parsed")
+        dates = [d for d, _, _ in rows]
+        self.assertEqual(dates, sorted(dates), "output MUST be ascending")
+
+    def test_fng_epoch_string_is_converted(self):
+        """Both encodings must parse: F&G sends an epoch STRING, Altcoin sends ISO-8601."""
+        import datetime as _dt
+        raw = {"data": [{"timestamp": "1790640000", "value": 68,
+                         "value_classification": "Greed"}]}
+        rows = self._sentiment_series(raw, "fng")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][1], 68)
+        # derive the expectation rather than hardcoding it, so the test cannot be wrong about
+        # what an epoch means
+        expected = _dt.datetime.fromtimestamp(1790640000, _dt.timezone.utc).date()
+        self.assertEqual(rows[0][0], expected)
+
+    def test_altseason_iso_timestamp_and_altcoin_index_are_parsed(self):
+        raw = {"data": {"timeframe": "90d", "points": [
+            {"timestamp": "2026-07-04T00:00:00Z", "altcoin_index": 51,
+             "altcoin_marketcap": 914395902197.26},
+            {"timestamp": "2026-07-05T00:00:00Z", "altcoin_index": 49},
+        ]}}
+        rows = self._sentiment_series(raw, "alt")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([r[1] for r in rows], [51, 49])
+        self.assertEqual(str(rows[0][0]), "2026-07-04")
+        # no classification field on altseason, so one is derived from the 50 boundary
+        self.assertEqual(rows[0][2], "Altcoin season")
+        self.assertEqual(rows[1][2], "Bitcoin season")
+
+    def test_the_two_encodings_do_not_silently_collide(self):
+        """An epoch and an ISO string in the same field name must not be confused."""
+        a = self._sentiment_series({"data": [{"timestamp": "1790640000", "value": 1}]}, "x")
+        b = self._sentiment_series(
+            {"data": {"points": [{"timestamp": "2026-07-04T00:00:00Z", "altcoin_index": 1}]}}, "x")
+        self.assertNotEqual(a[0][0], b[0][0])
+
+    def test_panel_states_fng_is_bitcoin_only(self):
+        from tabula_share.svg import render_sentiment_panel
+        out = render_sentiment_panel(self.r.get("sentiment") or {})
+        self.assertIn("Bitcoin-only", out)
+
+    def test_panel_states_the_altseason_redefinition(self):
+        from tabula_share.svg import render_sentiment_panel
+        out = render_sentiment_panel(self.r.get("sentiment") or {})
+        self.assertIn("redefined", out)
+        self.assertIn("outperformed BTC", out)
+
+    def test_every_sentiment_chart_has_a_table(self):
+        from tabula_share.svg import render_sentiment_panel
+        sent = {"fng": [(dt.date(2026, 1, 1) + dt.timedelta(days=i), 50 + i % 10, "Neutral")
+                        for i in range(20)],
+                "altseason": [(dt.date(2026, 1, 1) + dt.timedelta(days=i), 40 + i % 5, None)
+                              for i in range(20)]}
+        out = render_sentiment_panel(sent)
+        self.assertGreaterEqual(out.count('<table class="fallback">'), 2,
+                                "each chart needs its own tabular equivalent")
+
+    def test_out_of_range_values_do_not_crash(self):
+        from tabula_share.svg import render_sentiment_panel
+        out = render_sentiment_panel(
+            {"fng": [(dt.date(2026, 1, 1), 150, "bogus"), (dt.date(2026, 1, 2), -20, None)]})
+        self.assertIn("<svg", out)
+
+    def test_empty_sentiment_degrades_with_instructions(self):
+        from tabula_share.svg import render_sentiment_panel
+        out = render_sentiment_panel({})
+        self.assertIn("--live", out)
+        self.assertNotIn("<svg", out)
+
+
+class TestWindowControl(unittest.TestCase):
+    """P2.2: the window control must work and must not 500 on junk input."""
+
+    @classmethod
+    def setUpClass(cls):
+        import threading
+        from http.server import ThreadingHTTPServer
+        from tabula.server import Handler
+        Handler.offline = True
+        Handler.days = 180
+        cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def _get(self, path):
+        import urllib.request
+        with urllib.request.urlopen("http://127.0.0.1:%d%s" % (self.port, path),
+                                    timeout=25) as r:
+            return r.status, r.read().decode()
+
+    def test_form_is_present_and_labelled(self):
+        _, body = self._get("/")
+        self.assertIn('name="days"', body)
+        self.assertIn('<label for="days"', body, "the input needs a real label")
+        self.assertIn("Window (days)", body)
+
+    def test_days_query_renders(self):
+        status, body = self._get("/?days=90")
+        self.assertEqual(status, 200)
+        self.assertNotIn("No analysable window", body)
+
+    def test_window_choice_is_disclosed_as_a_confound(self):
+        """P2.3: a free window invites multiple comparisons. The page must say so."""
+        _, body = self._get("/")
+        self.assertIn("multiple-comparisons", body.lower())
+        self.assertIn("this window", body)
+
+    def test_the_rebase_anchor_is_disclosed_as_window_relative(self):
+        """The anchor is the WINDOW start, not a fixed date. Claiming otherwise would be false."""
+        _, body = self._get("/")
+        self.assertNotIn("does <em>not</em> move with the window", body)
+        self.assertIn("<em>within this window</em>", body)
+
+    def test_out_of_range_days_is_ignored_not_fatal(self):
+        for junk in ("5", "99999", "-1", "abc", ""):
+            with self.subTest(days=junk):
+                status, _ = self._get("/?days=%s" % junk)
+                self.assertEqual(status, 200, "a bad window must not 500")
+
+
+class TestAccessibilityAndLogging(unittest.TestCase):
+    """P2.5 and D5: preference blocks ship; log scrubbing is not opted out of."""
+
+    def test_preference_media_queries_are_present(self):
+        src = (ROOT / "apps" / "api" / "tabula" / "server.py").read_text().replace(" ", "")
+        for q in ("prefers-contrast:more", "forced-colors:active", "prefers-reduced-motion:reduce"):
+            self.assertIn(q, src)
+
+    def test_svg_axis_ticks_use_tabular_figures(self):
+        src = (ROOT / "packages" / "share" / "tabula_share" / "svg.py").read_text()
+        self.assertGreaterEqual(src.count("font-variant-numeric:tabular-nums"), 3,
+                                "axis ticks need it, not only the HTML tables")
+
+    def test_log_message_does_not_concatenate_the_request_line(self):
+        src = (ROOT / "apps" / "api" / "tabula" / "server.py").read_text()
+        i = src.find("def log_message")
+        self.assertGreater(i, 0, "log_message override is missing entirely")
+        body = src[i:i + 400]
+        self.assertNotIn('"[tabula] " +', body,
+                         "concatenating the raw format bypasses scrubbing in 3.12.13+")
+        self.assertIn("%s", body)
+
+
+class TestShareCard(unittest.TestCase):
+    """P2.4: the share card must exist and must be reproducible.
+
+    Reproducibility is the product's whole claim, so a share image that differs between two runs
+    on the same input would undermine it at the exact moment someone screenshots the result.
+    """
+
+    def test_module_is_stdlib_only(self):
+        """The share card drives the host's Chrome. It must not import anything else."""
+        import ast
+        tree = ast.parse((ROOT / "share_card.py").read_text())
+        mods = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                mods.update(a.name.split(".")[0] for a in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                mods.add(node.module.split(".")[0])
+        allowed = {"argparse", "hashlib", "shutil", "subprocess", "sys", "tempfile",
+                   "threading", "time", "pathlib", "__future__", "http", "tabula"}
+        self.assertTrue(mods <= allowed, f"share_card.py imports outside stdlib: {mods - allowed}")
+
+    def test_it_checks_the_artefact_not_the_return_code(self):
+        """Chrome exits 0 for a typo'd flag and for total failure alike."""
+        src = (ROOT / "share_card.py").read_text()
+        self.assertIn("stat().st_size", src)
+        self.assertIn("do NOT gate on returncode", src)
+
+    def test_determinism_flags_are_present(self):
+        src = (ROOT / "share_card.py").read_text()
+        for flag in ("--force-device-scale-factor=1", "--virtual-time-budget",
+                     "--hide-scrollbars", "--default-background-color"):
+            with self.subTest(flag=flag):
+                self.assertIn(flag, src)
+
+    def test_chrome_major_is_pinned_in_the_docs(self):
+        src = (ROOT / "share_card.py").read_text()
+        self.assertIn("Chrome major", src,
+                      "a Chrome upgrade can change rasterisation and break byte-reproducibility")
+
+    @unittest.skipUnless(shutil_which := __import__("shutil").which("google-chrome"),
+                         "host Chrome not present")
+    def test_two_renders_are_byte_identical(self):
+        """The real determinism claim, exercised end to end."""
+        import subprocess
+        import sys as _sys
+        r = subprocess.run([_sys.executable, "share_card.py", "--check"],
+                           cwd=str(ROOT), capture_output=True, text=True, timeout=280)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("byte-identical", r.stdout)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

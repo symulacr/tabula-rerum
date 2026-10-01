@@ -28,7 +28,8 @@ for p in (HERE, ROOT / "packages" / "features", ROOT / "packages" / "share"):
 from tabula.client import CmcClient, iso_z                     # noqa: E402
 from tabula_features.align import Series, build_window          # noqa: E402
 from tabula_features.transforms import flagship                 # noqa: E402
-from tabula_share.svg import render_spread_chart, render_table  # noqa: E402
+from tabula_share.svg import (render_sentiment_panel, render_spread_chart,  # noqa: E402
+                             render_table)
 from tabula_share.composition import render_panel, CSS_EXTRA     # noqa: E402
 
 # Fixtures make the judged path runnable with no network and no key.
@@ -53,8 +54,19 @@ table.fallback td:nth-child(2){font-variant-numeric:tabular-nums}
 .receipts td{font-variant-numeric:tabular-nums;padding:3px 8px;border-bottom:1px solid #ecebe6}
 .warn{color:#9b2c2c}
 :focus-visible{outline:2px solid #8a6d1f;outline-offset:2px}
+.winform{display:inline-flex;gap:6px;align-items:center;margin-left:10px;vertical-align:middle}
+.winform label{color:#5c5a54;font-size:.8rem}
+.winform input{width:6.5em;padding:4px 6px;font:inherit;font-size:.85rem;border:1px solid #8a8a84;
+  border-radius:2px;background:#fff;color:#1c1b19;font-variant-numeric:tabular-nums}
+.winform button{padding:4px 10px;font:inherit;font-size:.85rem;border:1px solid #8a6d1f;
+  background:#8a6d1f;color:#fff;border-radius:2px;cursor:pointer}
+.winform button:hover{background:#6f5718;border-color:#6f5718}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@media (max-width:640px){main{padding:20px 14px 48px}.card{padding:14px}}
+@media (prefers-contrast:more){.card{border-color:#1c1b19}.lede,.receipts{color:#1c1b19}
+  table.fallback th,table.fallback td{border-bottom-color:#1c1b19}}
+@media (forced-colors:active){.card,table.fallback th,table.fallback td{border-color:CanvasText}
+  .winform input,.winform button{border-color:CanvasText}}
+@media (max-width:640px){main{padding:20px 14px 48px}.card{padding:14px}.winform{display:flex;margin:8px 0 0}}
 """
 
 
@@ -63,6 +75,121 @@ def _fixture(name: str):
     if not p.is_file():
         return None
     return json.loads(p.read_text())
+
+
+def _epoch_to_date(ts: Any) -> Optional[dt.date]:
+    """Fear & Greed returns `timestamp` as an EPOCH STRING, unlike the index endpoints which use
+    `update_time`. It also arrives NEWEST-FIRST. Both must be normalised or the axis inverts.
+
+    Verified live: `/v3/fear-and-greed/historical?limit=500` returns
+    [{"timestamp": "1790640000", "value": 68, "value_classification": "Greed"}, ...]
+    descending from the newest day.
+    """
+    try:
+        return dt.datetime.fromtimestamp(int(ts), dt.timezone.utc).date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_date(raw: Any) -> Optional[dt.date]:
+    """Accept either an epoch string or an ISO-8601 timestamp.
+
+    The two sentiment endpoints disagree on BOTH field name and encoding, which is the kind of
+    inconsistency that silently produces an empty chart rather than an error:
+      - Fear & Greed:     {"timestamp": "1790640000", "value": 68, ...}        epoch string
+      - Altcoin Season:   {"timestamp": "2026-07-04T00:00:00Z", "altcoin_index": 51}
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    if s.isdigit():                                    # epoch seconds, as a STRING
+        try:
+            return dt.datetime.fromtimestamp(int(s), dt.timezone.utc).date()
+        except (TypeError, ValueError, OSError):
+            return None
+    try:                                                # ISO-8601, with or without Z
+        return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _sentiment_series(rows: list, label: str) -> list[tuple]:
+    """Normalise a sentiment payload to ascending (date, value, classification) tuples.
+
+    Handles both shapes: Fear & Greed returns a bare array, Altcoin Season returns an object
+    `{timeframe, points[]}`. Both are bounded 0-100 but they are different instruments, so they
+    get separate panels and separate labels.
+    """
+    pts = rows.get("data") if isinstance(rows, dict) else rows
+    if isinstance(pts, dict):                      # altseason: {timeframe, points: []}
+        pts = pts.get("points") or []
+    out: list[tuple] = []
+    for p in pts or []:
+        if not isinstance(p, dict):
+            continue
+        # VALUE: F&G uses `value`; Altcoin Season uses `altcoin_index`.
+        val = p.get("value")
+        if val is None:
+            val = p.get("altcoin_index")
+        d = _to_date(p.get("timestamp") or p.get("last_updated") or p.get("time"))
+        if d is None:
+            continue
+        cls = p.get("value_classification")
+        if cls is None and val is not None:        # altseason has no classification field
+            cls = "Altcoin season" if float(val) >= 50 else "Bitcoin season"
+        out.append((d, val, cls))
+    out.sort(key=lambda t: t[0])                   # ascending, regardless of arrival order
+    return out
+
+
+def load_sentiment(client: CmcClient, offline: bool) -> dict:
+    """Fear & Greed + Altcoin Season. Both keyless; both normalised to ascending daily points."""
+    out: dict = {"fng": [], "altseason": [], "notes": []}
+
+    if offline:
+        for key, slot in (("fng_historical", "fng"), ("altcoin_season_historical", "altseason")):
+            payload = _fixture(f"{key}.json")
+            if payload is None:
+                out["notes"].append(f"fixture missing for {key}")
+                continue
+            rows = _sentiment_series(payload, key)
+            out[slot] = rows
+            out["notes"].append(f"{slot} fixture ({len(rows)} points, ascending)")
+        return out
+
+    # live. F&G pages at 500 with a 1-based `start` offset, newest-first per page.
+    try:
+        collected: dict = {}
+        for start in (1, 501, 1001):
+            r = client.get("fng_historical", limit=500, start=start)
+            if not r.ok:
+                out["notes"].append(f"F&G page start={start} failed: "
+                                    f"{r.receipt.error_name or r.error_code}")
+                break
+            for p in (r.data or []):
+                d = _epoch_to_date(p.get("timestamp"))
+                if d:
+                    collected[d] = (d, p.get("value"), p.get("value_classification"))
+            if len(r.data or []) < 500:
+                break
+        out["fng"] = [collected[k] for k in sorted(collected)]
+        out["notes"].append(f"F&G live ({len(out['fng'])} points, ascending)")
+    except Exception as exc:                                        # noqa: BLE001
+        out["notes"].append(f"F&G live failed: {type(exc).__name__}: {exc}")
+
+    try:
+        r = client.get("altcoin_season_historical", timeframe="90d")
+        if r.ok:
+            out["altseason"] = _sentiment_series({"data": r.data}, "altseason")
+            out["notes"].append(f"Altcoin Season live timeframe=90d ({len(out['altseason'])} points)")
+        else:
+            out["notes"].append(f"Altcoin Season failed: {r.receipt.error_name or r.error_code}")
+    except Exception as exc:                                        # noqa: BLE001
+        out["notes"].append(f"Altcoin Season live failed: {type(exc).__name__}: {exc}")
+
+    return out
 
 
 def load_series(client: CmcClient, offline: bool) -> tuple[dict[str, Series], list[str]]:
@@ -105,7 +232,9 @@ def build_result(days: int = DEFAULT_WINDOW_DAYS, offline: bool = False,
 
     win = build_window(series, start, end)
     result = flagship(win, "CMC20", "CMC100")
-    result["notes"] = notes
+    sent = load_sentiment(client, offline)
+    result["sentiment"] = {"fng": sent["fng"], "altseason": sent["altseason"]}
+    result["notes"] = notes + sent["notes"]
     result["window"] = (start, end)
     result["receipts"] = [r.to_dict() for r in client.receipts]
     result["auth_modes"] = sorted({r.auth_mode for r in client.receipts}) or ["none"]
@@ -119,6 +248,7 @@ def page(result: dict) -> str:
     comp = render_panel((result.get("series") or {}).get("CMC100"))
     chart = render_spread_chart(result)
     table = render_table(result)
+    sentiment = render_sentiment_panel(result.get("sentiment") or {})
     receipt_rows = "".join(
         f"<tr><td>{html.escape(str(r['path_key']))}</td>"
         f"<td>{html.escape(str(r['auth_mode']))}</td>"
@@ -152,6 +282,13 @@ def page(result: dict) -> str:
             f"factor, not the factor itself. The latest spread is "
             f"{st['latest_spread']:+.3f} pp, at the {st['latest_pct']:.0f}th percentile of "
             f"this window, which is the defensible way to say where it sits."
+            f"<br><small><strong>Read the window as a choice, not a fact.</strong> You can set "
+            f"the window freely above, and a free choice invites the multiple-comparisons "
+            f"problem: some windows will look interesting by luck. Both series are rebased to 100 "
+            f"at <strong>this window's first day</strong>, so the spread is relative performance "
+            f"<em>within this window</em> — and the mean, sd and percentile move with it. They "
+            f"describe the window you are looking at, not the market. Change the window and those "
+            f"numbers are not comparable to these.</small>"
         )
     else:
         lede = f'<span class="warn">No analysable window: {html.escape(str(result.get("reason")))}</span>'
@@ -162,12 +299,21 @@ def page(result: dict) -> str:
 <title>Tabula Rerum — Regimen</title><style>{CSS}</style></head>
 <body><main>
 <h1>Tabula Rerum</h1>
-<p class="lede">Regimen · {html.escape(str(start))} → {html.escape(str(end))} ·</p>
+<p class="lede">Regimen · {html.escape(str(start))} → {html.escape(str(end))} ·
+<form class="winform" method="get" action="/">
+<label for="days">Window (days)</label>
+<input type="number" id="days" name="days" min="30" max="1095" step="1" value="{result['n']}">
+<button type="submit">Apply</button>
+</form></p>
 <h2>Regimen — where the indices diverged</h2>
 <p class="lede">{lede}</p>
 <div class="card">{chart}</div>
 <h2>The same data, as text</h2>
 <div class="card">{table}</div>
+<h2>Sentiment context</h2>
+<p class="lede">Neither series below is a claim about the CMC indices above. Both are bounded
+0–100 vendor gauges and are labelled with what they do and do not measure.</p>
+{sentiment}
 <h2>Composition</h2>
 {comp}
 <h2>Provenance</h2>
@@ -215,6 +361,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route(self, head_only: bool) -> None:
         u = urlparse(self.path)
+        # the window control submits ?days=N; it is the same code path as --days
+        q = parse_qs(u.query or "")
+        if "days" in q:
+            try:
+                val = int(q["days"][0])
+                if 30 <= val <= 1095:
+                    self.days = val
+            except (TypeError, ValueError):
+                pass
         if u.path in ("/", "/index.html"):
             try:
                 result = build_result(self.days, self.offline)
