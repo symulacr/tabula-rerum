@@ -1177,6 +1177,7 @@ class TestPublishedTreeIsComplete(unittest.TestCase):
             self.skipTest(f"clone failed: {c.stderr.strip()[:120]}")
         env = {k: v for k, v in os.environ.items()
                if k not in ("GITHUB_TOKEN", "GITHUB_PERSONAL_ACCESS_TOKEN")}
+        env.pop("TABULA_RUN_CLONE_GATE", None)
         r = sp.run([sys.executable, "run.py", "--test"], cwd=dest, capture_output=True,
                    text=True, env=env, timeout=280)
         tail = (r.stdout + r.stderr).strip().splitlines()[-1]
@@ -1184,13 +1185,25 @@ class TestPublishedTreeIsComplete(unittest.TestCase):
                          f"a fresh clone of the committed tree does not pass: {tail}")
 
     def test_the_clone_gate_is_not_recursive_by_construction(self):
-        """The failure mode of the test above is silent runaway forking, so pin the guard."""
+        """The failure mode of the test above is silent runaway forking, so pin the guard.
+
+        Two separate mistakes, both observed:
+
+          1. no gate at all -- the clone clones again, forever.
+          2. a gate that INHERITS its own flag -- os.environ is copied into the child, so the
+             clone sees TABULA_RUN_CLONE_GATE=1 too and re-enables the gate that was supposed
+             to stop it. The guard must be popped, not merely read.
+        """
         src = (ROOT / "tests" / "test_tabula.py").read_text()
         i = src.find("def test_the_clone_would_actually_pass")
         self.assertGreater(i, 0)
-        body = src[i:i + 1200]
+        body = src[i:i + 1400]
         self.assertIn("TABULA_RUN_CLONE_GATE", body,
                       "an ungated clone-inside-clone test forks without bound")
+        self.assertIn('env.pop("TABULA_RUN_CLONE_GATE"', body,
+                      "inheriting the flag into the child re-enables the very gate it stops")
+        self.assertNotIn('env["TABULA_RUN_CLONE_GATE"]', body,
+                         "setting the flag in the child is exactly the recursion bug")
 
 
 if __name__ == "__main__":
