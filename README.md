@@ -11,7 +11,7 @@
 ```bash
 python3 run.py          # offline from fixtures — no key, no network
 python3 run.py --live   # live keyless CoinMarketCap
-python3 run.py --test   # 99 tests
+python3 run.py --test   # 115 tests
 bash demo.sh            # reproduce the finding end-to-end
 python3 share_card.py --check   # render the share card and prove it is byte-reproducible
 ```

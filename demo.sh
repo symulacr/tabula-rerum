@@ -6,11 +6,11 @@ cd "$(dirname "$0")"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 
-say "1. THE TEST SUITE (47 tests, stdlib-only enforced)"
+say "1. THE TEST SUITE (stdlib-only enforced; count is asserted against this file)"
 python3 run.py --test 2>&1 | tail -4
 
 say "2. START THE APP — offline, no key, no network"
-python3 run.py --port 8099 &
+python3 run.py --port 8099 2>/dev/null &
 SRV=$!
 sleep 3
 
@@ -57,12 +57,17 @@ PY
 say "5. THE PROVENANCE LAYER — receipts for every call"
 curl -s http://127.0.0.1:8099/api/regimen | python3 -m json.tool 2>/dev/null | head -30
 
-say "6. THE PAGE — SVG chart, table fallback, composition panel"
+say "6. THE PAGE — SVG chart, table fallback, sentiment panels, composition panel"
 echo "  open http://127.0.0.1:8099/ — scroll to show:"
 echo "    - the Regime chart with its measured caption"
-echo "    - the tabular equivalent (every chart ships one)"
+echo "    - the window control (try ?days=120) and its multiple-comparisons caveat"
+echo "    - Bitcoin Fear & Greed and the Altcoin Season Index, each labelled with"
+echo "      what it does and does not measure, each with its own table fallback"
 echo "    - the Composition panel with the 'not market churn' caveat"
 echo "    - the provenance table listing every receipt"
+echo
+echo "  verifying the page from the shell, so the claims above are checkable:"
+curl -s http://127.0.0.1:8099/ | grep -oE "(Bitcoin Fear &amp; Greed|Altcoin Season Index \(90d\)|outperformed BTC|Bitcoin-only|multiple-comparisons|name=\"days\")" | sort -u | sed 's/^/    /'
 
 say "7. A REAL KEYLESS API CALL (no key header, no credentials)"
 curl -s "https://pro-api.coinmarketcap.com/public-api/v3/index/cmc20-latest" | head -c 200; echo

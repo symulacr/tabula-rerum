@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -34,6 +35,12 @@ from tabula_share.svg import render_spread_chart, render_table                  
 from tabula_share.composition import render_panel, rows_for                        # noqa: E402
 
 FIXTURES = ROOT / "evidence" / "fixtures"
+
+# Any test that shells out to `run.py --test` re-enters the whole suite, because discovery
+# finds this very file again. Such a test is a fork bomb unless the child is told to skip it.
+# Set in the child, checked on entry, and POPPED from the child env -- never merely inherited,
+# which re-arms the guard it is meant to enforce.
+SPAWN_GUARD = "TABULA_NO_SUITE_RESPAWN"
 
 
 def _fixture(name):
@@ -1170,6 +1177,8 @@ class TestPublishedTreeIsComplete(unittest.TestCase):
         import tempfile
         if not os.environ.get("TABULA_RUN_CLONE_GATE"):
             self.skipTest("set TABULA_RUN_CLONE_GATE=1 to run the clone gate")
+        if os.environ.get(SPAWN_GUARD):
+            self.skipTest("already inside a spawned suite; refusing to recurse")
         dest = tempfile.mkdtemp(prefix="tabula-clone-")
         c = sp.run(["git", "clone", "--depth", "1", str(ROOT), dest],
                    capture_output=True, text=True, timeout=180)
@@ -1178,6 +1187,7 @@ class TestPublishedTreeIsComplete(unittest.TestCase):
         env = {k: v for k, v in os.environ.items()
                if k not in ("GITHUB_TOKEN", "GITHUB_PERSONAL_ACCESS_TOKEN")}
         env.pop("TABULA_RUN_CLONE_GATE", None)
+        env[SPAWN_GUARD] = "1"
         r = sp.run([sys.executable, "run.py", "--test"], cwd=dest, capture_output=True,
                    text=True, env=env, timeout=280)
         tail = (r.stdout + r.stderr).strip().splitlines()[-1]
@@ -1197,13 +1207,99 @@ class TestPublishedTreeIsComplete(unittest.TestCase):
         src = (ROOT / "tests" / "test_tabula.py").read_text()
         i = src.find("def test_the_clone_would_actually_pass")
         self.assertGreater(i, 0)
-        body = src[i:i + 1400]
+        j = src.find("\n    def ", i + 10)
+        body = src[i:j if j > 0 else i + 2500]
         self.assertIn("TABULA_RUN_CLONE_GATE", body,
                       "an ungated clone-inside-clone test forks without bound")
         self.assertIn('env.pop("TABULA_RUN_CLONE_GATE"', body,
                       "inheriting the flag into the child re-enables the very gate it stops")
         self.assertNotIn('env["TABULA_RUN_CLONE_GATE"]', body,
                          "setting the flag in the child is exactly the recursion bug")
+        self.assertIn("env[SPAWN_GUARD]", body,
+                      "the clone must be told not to spawn the suite again")
+
+
+class TestDocumentedCountsAreTrue(unittest.TestCase):
+    """A number printed in the README or the demo script must be the real number.
+
+    Both drifted: the README claimed 99 while the suite ran 111, and demo.sh -- which is
+    screen-recorded for the submission -- claimed 47. Neither is checkable by reading, because
+    the number is only wrong once the suite has changed, and a count that is correct on the
+    day it is written is not evidence of anything. So it is asserted here.
+    """
+
+    def _actual_count(self) -> int:
+        src = (ROOT / "tests" / "test_tabula.py").read_text()
+        names = re.findall(r"^\s+def (test_\w+)", src, re.M)
+        classes = re.findall(r"^class (\w+)\(unittest\.TestCase\)", src, re.M)
+        self.assertTrue(classes, "no TestCase classes found; the parser is wrong")
+        return len(names)
+
+    def test_readme_quotes_the_real_test_count(self):
+        actual = self._actual_count()
+        readme = (ROOT / "README.md").read_text()
+        claimed = [int(m) for m in re.findall(r"#\s*(\d+)\s+tests", readme)]
+        self.assertTrue(claimed, "README should state a test count; none found")
+        self.assertEqual(claimed, [actual],
+                         f"README claims {claimed}, the suite has {actual}")
+
+    def test_demo_script_does_not_hardcode_a_stale_count(self):
+        """demo.sh is screen-recorded, so a stale number here is shown on camera."""
+        demo = (ROOT / "demo.sh").read_text()
+        self.assertNotRegex(
+            demo, r"TEST SUITE \(\s*\d+\s+tests",
+            "demo.sh hardcodes a test count that will drift; let the suite print it")
+
+    def test_the_suite_runs_the_documented_command(self):
+        """Run the documented command and read the real count off its output.
+
+        Guarded, because this test re-enters the suite: `run.py --test` discovers this file, so
+        a suite-invoking test that spawns `run.py --test` spawns itself, forever. The flag is
+        POPPED from the child environment -- copying os.environ would hand the child the flag
+        and re-arm the very guard that is supposed to stop it.
+
+        This is the second time this exact mistake has been made in this file (the clone gate
+        did it first), which is why the guard is a named constant checked by a test of its own
+        rather than an inline condition.
+        """
+        import os
+        import subprocess as sp
+        if os.environ.get(SPAWN_GUARD):
+            self.skipTest("already inside a spawned suite; refusing to recurse")
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("GITHUB_TOKEN", "GITHUB_PERSONAL_ACCESS_TOKEN")}
+        env[SPAWN_GUARD] = "1"
+        r = sp.run([sys.executable, "run.py", "--test"], cwd=str(ROOT),
+                   capture_output=True, text=True, env=env, timeout=280)
+        m = re.search(r"Ran (\d+) tests", r.stdout + r.stderr)
+        self.assertIsNotNone(m, "no 'Ran N tests' line; the output format changed")
+        self.assertEqual(r.returncode, 0,
+                         (r.stdout + r.stderr).strip().splitlines()[-1])
+        self.assertEqual(int(m.group(1)), self._actual_count(),
+                         "unittest disagrees with the source scan")
+
+    def test_no_test_spawns_the_suite_without_the_guard(self):
+        """A suite-spawning test without a guard forks silently. Pin the discipline.
+
+        Scans the whole test file for any subprocess invocation of `run.py --test` or
+        `unittest`, and requires that each one sits inside a function that first checks
+        SPAWN_GUARD.
+        """
+        src = (ROOT / "tests" / "test_tabula.py").read_text()
+        import ast
+        tree = ast.parse(src)
+        offenders = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            seg = ast.get_source_segment(src, node) or ""
+            spawns = ("run.py" in seg and "--test" in seg) or "unittest discover" in seg
+            if not spawns:
+                continue
+            if "SPAWN_GUARD" not in seg:
+                offenders.append(node.name)
+        self.assertEqual(offenders, [],
+                         f"these spawn the suite with no {SPAWN_GUARD} guard: {offenders}")
 
 
 if __name__ == "__main__":
