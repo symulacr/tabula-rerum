@@ -2,10 +2,11 @@
 
 **Track: Data and Visualisation** · Build with CMC: API Hackathon
 
-> CMC20 and CMC100 correlate at **r = 0.999902** — the same asset class. Their difference has
-> lag-1 autocorrelation **ρ₁ = 0.947**, a unit root: no equilibrium, no valid null. A 70-day
-> window has an effective sample size of **6, not 70**. So we report percentage points, percentile
-> rank and `n_eff` — and ship a receipt behind every number.
+> CMC20 and CMC100 correlate at **r = 0.999902** — the same asset class, so their difference is
+> close to noise by construction. That difference's lag-1 autocorrelation is **ρ₁ = 0.7625**:
+> strongly persistent, with no stationary distribution and no valid null. A 70-day window of it
+> carries an effective sample size of **26, not 70**. So we report percentage points and
+> percentile rank — and ship a receipt behind every number.
 
 ```bash
 python3 run.py          # offline from fixtures — no key, no network

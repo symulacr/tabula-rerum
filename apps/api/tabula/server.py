@@ -131,13 +131,27 @@ def page(result: dict) -> str:
 
     if result.get("analysable"):
         st = result["stats"]
+        rho = st.get("rho1")
+        rlv = st.get("r_levels")
+        # The caption states what was measured and refuses what cannot be claimed. The earlier
+        # version of this line called a 2.410-point span "only" and quoted it in sigma; on the
+        # committed fixtures that span is 33.9% of the mean, and a sigma of a unit-root series
+        # is not evidence. Both were corrected, and a test now recomputes them from the data.
         lede = (
             f"CMC20 against CMC100, both rebased to {st['base']:g}, differenced, and plotted in "
-            f"standard deviations. {result['n']} paired observations, "
+            f"<strong>percentage points</strong>. {result['n']} paired observations, "
             f"{result['coverage']:.1%} coverage. "
-            f"<strong>On raw index values the same difference spans only "
-            f"{st['raw_span']:.3f} points — {st['raw_span_in_sigma']:.2f}σ.</strong> "
-            f"The flat form is the reason this panel is normalised."
+            f"<strong>The two indices correlate at r = {rlv:.6f}</strong> — they are the same "
+            f"asset class, so their difference is close to noise by construction. "
+            f"That spread's lag-1 autocorrelation is <strong>ρ₁ = {rho:.3f}</strong>: it is "
+            f"strongly persistent, so it has no stationary distribution, no equilibrium to "
+            f"deviate from, and no valid null. "
+            f"<strong>No significance is claimed, and no z-score is used as evidence.</strong> "
+            f"A {result['n']}-day window of it carries an effective sample size of "
+            f"<strong>n_eff = {st['n_eff']}</strong> — that is n divided by the persistence "
+            f"factor, not the factor itself. The latest spread is "
+            f"{st['latest_spread']:+.3f} pp, at the {st['latest_pct']:.0f}th percentile of "
+            f"this window, which is the defensible way to say where it sits."
         )
     else:
         lede = f'<span class="warn">No analysable window: {html.escape(str(result.get("reason")))}</span>'
@@ -169,37 +183,63 @@ class Handler(BaseHTTPRequestHandler):
     offline = True
     days = DEFAULT_WINDOW_DAYS
 
-    def _send(self, body: str, code: int = 200, ctype: str = "text/html; charset=utf-8") -> None:
+    # A server-built page with no external resources and only inline styles needs a policy this
+    # tight. 'unsafe-inline' is permitted for style only because the CSS is emitted inline by
+    # this process; there is no script on the page, so script-src needs no exception.
+    CSP = ("default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; "
+           "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+
+    def _send(self, body: str, code: int = 200, ctype: str = "text/html; charset=utf-8",
+              head_only: bool = False) -> None:
         raw = body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", self.CSP)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
-        self.wfile.write(raw)
+        if not head_only:                       # HEAD must carry the headers and no body
+            self.wfile.write(raw)
 
-    def do_GET(self) -> None:                                   # noqa: N802
+    def version_string(self) -> str:
+        """Do not advertise the interpreter build. Loopback only, but it costs nothing."""
+        return "Tabula"
+
+    def do_HEAD(self) -> None:                                    # noqa: N802
+        self._route(head_only=True)
+
+    def do_GET(self) -> None:                                     # noqa: N802
+        self._route(head_only=False)
+
+    def _route(self, head_only: bool) -> None:
         u = urlparse(self.path)
         if u.path in ("/", "/index.html"):
             try:
                 result = build_result(self.days, self.offline)
             except Exception as exc:                             # noqa: BLE001
-                self._send(f"<h1>error</h1><pre>{html.escape(str(exc))}</pre>", 500)
+                self._send(f"<h1>error</h1><pre>{html.escape(str(exc))}</pre>", 500,
+                           head_only=head_only)
                 return
-            self._send(page(result))
+            self._send(page(result), head_only=head_only)
         elif u.path == "/healthz":
-            self._send(json.dumps({"ok": True, "offline": self.offline}), ctype="application/json")
+            self._send(json.dumps({"ok": True, "offline": self.offline}),
+                       ctype="application/json", head_only=head_only)
         elif u.path == "/api/regimen":
             try:
                 self._send(json.dumps(build_result(self.days, self.offline), default=str),
-                           ctype="application/json")
+                           ctype="application/json", head_only=head_only)
             except Exception as exc:                             # noqa: BLE001
-                self._send(json.dumps({"error": str(exc)}), 500, "application/json")
+                self._send(json.dumps({"error": str(exc)}), 500, "application/json",
+                           head_only=head_only)
         else:
-            self._send("not found", 404, "text/plain; charset=utf-8")
+            self._send("not found", 404, "text/plain; charset=utf-8", head_only=head_only)
 
-    def log_message(self, fmt: str, *args) -> None:             # quieter default logging
-        sys.stderr.write("[tabula] " + fmt % args + "\n")
+    def log_message(self, fmt: str, *args) -> None:
+        # Deliberately does NOT prefix the caller-controlled path, so the control-character
+        # scrubbing that CPython added in 3.12.13 still applies.
+        sys.stderr.write("[tabula] %s\n" % (fmt % args))
 
 
 def main(argv: list[str] | None = None) -> int:

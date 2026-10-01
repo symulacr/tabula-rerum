@@ -41,12 +41,17 @@ def ac(x, k=1):
     m = sum(x)/len(x)
     return sum((x[i]-m)*(x[i-k]-m) for i in range(k, len(x))) / sum((v-m)**2 for v in x)
 r1 = ac(sp)
+rba = [v*100/ra[0] for v in ra]; rbb = [v*100/rb[0] for v in rb]
+reb = [p - q for p, q in zip(rba, rbb)]
+r2 = ac(reb)
+neff = n / math.sqrt((1 + r2) / (1 - r2))
 print(f"  window            {days[0]} .. {days[-1]}  (n={n})")
 print(f"  r(CMC20,CMC100)   {pearson(ra, rb):.6f}   <- same asset class")
-print(f"  spread mean/sd    {mu:.3f} / {sd:.4f}   span {max(sp)-min(sp):.3f} ({(max(sp)-min(sp))/mu*100:.1f}% of mean)")
-print(f"  rho1(spread)      {r1:.3f}   <- unit root, no valid null")
-print(f"  n_eff             {math.sqrt((1+r1)/(1-r1)):.2f}  (NOT {n})")
+print(f"  raw spread        mean {mu:.3f} sd {sd:.4f} span {max(sp)-min(sp):.3f} ({(max(sp)-min(sp))/mu*100:.1f}% of mean)")
+print(f"  rebased spread    rho1 {r2:.4f}   <- no stationary distribution, no valid null")
+print(f"  n_eff             {neff:.1f}  (NOT {n})")
 print("  => a z-score here is a POSITION, not a test statistic")
+print("  NOTE: the RAW spread's rho1 is %.4f; the chart plots the REBASED one." % r1)
 PY
 
 say "5. THE PROVENANCE LAYER — receipts for every call"
