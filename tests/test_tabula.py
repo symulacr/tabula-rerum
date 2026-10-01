@@ -93,7 +93,7 @@ class TestE3Sentinels(unittest.TestCase):
         for s in C.CLIENT_SENTINELS:
             self.assertTrue(s.startswith(C.SENTINEL_NS))
             with self.assertRaises(ValueError):
-                int(s)                                  # raises, so it cannot alias a CMC code
+                int(s)
         for code in C.ALL_KNOWN_ERROR_CODES:
             self.assertNotIn(code, C.CLIENT_SENTINELS)
             self.assertTrue(code.isdigit())
@@ -237,7 +237,7 @@ class TestAlignment(unittest.TestCase):
     def test_inner_join_for_statistics(self):
         days = [dt.date(2026, 1, 1) + dt.timedelta(days=i) for i in range(60)]
         a = self._series("a", days)
-        b = self._series("b", days[3:])                       # b starts 3 days later
+        b = self._series("b", days[3:])
         w = build_window({"a": a, "b": b}, days[0], days[-1])
         self.assertEqual(len(w.paired_days), 57)
         self.assertEqual(w.dropped_reason, None)
@@ -255,7 +255,7 @@ class TestAlignment(unittest.TestCase):
         """Either guard may fire first; both are legitimate and the window must not be analysed."""
         days = [dt.date(2026, 1, 1) + dt.timedelta(days=i) for i in range(40)]
         a = self._series("a", days)
-        b = self._series("b", days[:10])                      # 10 of 40 days
+        b = self._series("b", days[:10])
         w = build_window({"a": a, "b": b}, days[0], days[-1])
         self.assertFalse(w.is_analysable)
         self.assertTrue(
@@ -266,7 +266,7 @@ class TestAlignment(unittest.TestCase):
         """Enough paired points to clear the count guard, but too sparse to claim the window."""
         days = [dt.date(2026, 1, 1) + dt.timedelta(days=i) for i in range(200)]
         a = self._series("a", days)
-        b = self._series("b", days[:50])                     # 50 of 200 days
+        b = self._series("b", days[:50])
         w = build_window({"a": a, "b": b}, days[0], days[-1])
         self.assertFalse(w.is_analysable)
         self.assertIn("coverage", w.dropped_reason)
@@ -434,7 +434,6 @@ class TestUnroutedDiscriminator(unittest.TestCase):
     This is the test that makes that claim true rather than aspirational.
     """
 
-    # Exactly the bytes captured live from /public-api/v9/totally/bogus
     UNROUTED_BODY = {"status": {"timestamp": "2026-09-30T23:50:45.610Z", "error_code": "500",
                                 "error_message": "The system is busy, please try again later!",
                                 "elapsed": "0", "credit_count": 0}}
@@ -530,7 +529,6 @@ class TestGapRendering(unittest.TestCase):
         moves = m.group(1).count("M")
         self.assertGreaterEqual(moves, 2,
                                 "a gap must start a new subpath (a second M), not bridge")
-        # and the second subpath must start at the x of a LATER index, not immediately after
         coords = re.findall(r"[ML]([\d.]+),([\d.]+)", m.group(1))
         first_xs = [float(x) for x, _ in coords[:moves]]
         self.assertGreater(first_xs[-1], first_xs[0] + 10,
@@ -667,12 +665,15 @@ class TestPaletteContrast(unittest.TestCase):
                 self.assertGreaterEqual(self._ratio(PALETTE[name], PALETTE["ground"]), 3.0,
                                         f"{name} must meet WCAG 1.4.11")
 
-    def test_rule_is_documented_as_decorative_because_it_cannot_pass(self):
-        from tabula_share.svg import PALETTE
+    def test_rule_is_decorative_because_it_cannot_pass(self):
+        from tabula_share.svg import PALETTE, render_spread_chart
         self.assertLess(self._ratio(PALETTE["rule"], PALETTE["ground"]), 3.0)
-        src = (ROOT / "packages" / "share" / "tabula_share" / "svg.py").read_text()
-        self.assertIn("decorative", src.lower(),
-                      "the palette must document that `rule` is decorative only")
+        from tabula.server import build_result
+        svg = render_spread_chart(build_result(days=180, offline=True))
+        self.assertIn(PALETTE["rule"], svg,
+                      "rule is used as a stroke, so its contrast is a real constraint")
+        self.assertNotIn(f'fill="{PALETTE["rule"]}"', svg,
+                         "rule must never be a fill: a 1.35:1 fill would hide the series")
 
 
 class TestHttpSurface(unittest.TestCase):
@@ -758,8 +759,6 @@ class TestSentimentPanel(unittest.TestCase):
         rows = self._sentiment_series(raw, "fng")
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][1], 68)
-        # derive the expectation rather than hardcoding it, so the test cannot be wrong about
-        # what an epoch means
         expected = _dt.datetime.fromtimestamp(1790640000, _dt.timezone.utc).date()
         self.assertEqual(rows[0][0], expected)
 
@@ -773,7 +772,6 @@ class TestSentimentPanel(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual([r[1] for r in rows], [51, 49])
         self.assertEqual(str(rows[0][0]), "2026-07-04")
-        # no classification field on altseason, so one is derived from the 50 boundary
         self.assertEqual(rows[0][2], "Altcoin season")
         self.assertEqual(rows[1][2], "Bitcoin season")
 
@@ -918,13 +916,35 @@ class TestShareCard(unittest.TestCase):
         self.assertTrue(mods <= allowed, f"share_card.py imports outside stdlib: {mods - allowed}")
 
     def test_it_checks_the_artefact_not_the_return_code(self):
-        """Chrome exits 0 for a typo'd flag and for total failure alike."""
-        src = (ROOT / "share_card.py").read_text()
-        self.assertIn("stat().st_size", src)
-        self.assertIn("do NOT gate on returncode", src)
+        from share_card import render
+        import threading
+        from http.server import ThreadingHTTPServer
+        from tabula.server import Handler
+        import share_card
+        import tempfile
+        import pathlib
+        import types
+
+        Handler.offline = True
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        png = pathlib.Path(tempfile.mkdtemp()) / "absent.png"
+        real_run = share_card.subprocess.run
+        share_card.subprocess.run = lambda *a, **k: types.SimpleNamespace(
+            returncode=0, stderr="", stdout="")
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                render("chrome", None, png)
+            self.assertIn("produced no image", str(ctx.exception))
+        finally:
+            share_card.subprocess.run = real_run
+            srv.shutdown()
+            srv.server_close()
 
     def test_determinism_flags_are_present(self):
-        src = (ROOT / "share_card.py").read_text()
+        from share_card import render
+        import inspect
+        src = inspect.getsource(render)
         for flag in ("--force-device-scale-factor=1", "--virtual-time-budget",
                      "--hide-scrollbars", "--default-background-color"):
             with self.subTest(flag=flag):
@@ -966,7 +986,7 @@ class TestInterpreterFloor(unittest.TestCase):
         are absent, and a substring search would be testing the comment."""
         try:
             import tomllib
-        except ModuleNotFoundError:                       # 3.10 and earlier
+        except ModuleNotFoundError:
             self.skipTest("tomllib needs 3.11+")
         with open(ROOT / "pyproject.toml", "rb") as f:
             toml = tomllib.load(f)
@@ -975,7 +995,6 @@ class TestInterpreterFloor(unittest.TestCase):
         self.assertNotIn("dependencies", toml["project"],
                          "the runtime is standard library only")
         self.assertNotIn("optional-dependencies", toml["project"])
-        # dev tooling is configured, and none of it is a runtime requirement
         self.assertIn("tool", toml)
         self.assertIn("ruff", toml["tool"])
         self.assertIn("mypy", toml["tool"])
@@ -991,14 +1010,14 @@ class TestInterpreterFloor(unittest.TestCase):
 
         real = _sys.version_info
         try:
-            _sys.version_info = FakeVI((3, 12, 3))     # below the floor
+            _sys.version_info = FakeVI((3, 12, 3))
             msg = S.check_interpreter()
             self.assertIsNotNone(msg)
             self.assertIn("gh-119452", msg)
             self.assertIn("3.12.3", msg)
-            _sys.version_info = FakeVI((3, 13, 0))     # above the floor
+            _sys.version_info = FakeVI((3, 13, 0))
             self.assertIsNone(S.check_interpreter())
-            _sys.version_info = FakeVI((3, 12, 13))    # exactly the floor
+            _sys.version_info = FakeVI((3, 12, 13))
             self.assertIsNone(S.check_interpreter(), "the floor itself must not warn")
         finally:
             _sys.version_info = real

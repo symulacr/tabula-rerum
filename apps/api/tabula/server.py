@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent.parent          # tabula-rerum/
+ROOT = HERE.parent.parent.parent
 for p in (HERE, ROOT / "packages" / "features", ROOT / "packages" / "share"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
@@ -32,7 +32,6 @@ from tabula_share.svg import (render_sentiment_panel, render_spread_chart,  # no
                              render_table)
 from tabula_share.composition import render_panel, CSS_EXTRA     # noqa: E402
 
-# Fixtures make the judged path runnable with no network and no key.
 FIXTURE_DIR = ROOT / "evidence" / "fixtures"
 DEFAULT_WINDOW_DAYS = 180
 
@@ -90,12 +89,12 @@ def _to_date(raw: Any) -> Optional[dt.date]:
     s = str(raw).strip()
     if not s:
         return None
-    if s.isdigit():                                    # epoch seconds, as a STRING
+    if s.isdigit():
         try:
             return dt.datetime.fromtimestamp(int(s), dt.timezone.utc).date()
         except (TypeError, ValueError, OSError):
             return None
-    try:                                                # ISO-8601, with or without Z
+    try:
         return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).date()
     except (TypeError, ValueError):
         return None
@@ -109,13 +108,12 @@ def _sentiment_series(rows: list, label: str) -> list[tuple]:
     get separate panels and separate labels.
     """
     pts = rows.get("data") if isinstance(rows, dict) else rows
-    if isinstance(pts, dict):                      # altseason: {timeframe, points: []}
+    if isinstance(pts, dict):
         pts = pts.get("points") or []
     out: list[tuple] = []
     for p in pts or []:
         if not isinstance(p, dict):
             continue
-        # VALUE: F&G uses `value`; Altcoin Season uses `altcoin_index`.
         val = p.get("value")
         if val is None:
             val = p.get("altcoin_index")
@@ -123,10 +121,10 @@ def _sentiment_series(rows: list, label: str) -> list[tuple]:
         if d is None:
             continue
         cls = p.get("value_classification")
-        if cls is None and val is not None:        # altseason has no classification field
+        if cls is None and val is not None:
             cls = "Altcoin season" if float(val) >= 50 else "Bitcoin season"
         out.append((d, val, cls))
-    out.sort(key=lambda t: t[0])                   # ascending, regardless of arrival order
+    out.sort(key=lambda t: t[0])
     return out
 
 
@@ -145,9 +143,6 @@ def load_sentiment(client: CmcClient, offline: bool) -> dict:
             out["notes"].append(f"{slot} fixture ({len(rows)} points, ascending)")
         return out
 
-    # live. F&G pages at 500 with a 1-based `start` offset, newest-first per page.
-    # NOTE: this runs AFTER load_series, so the client's own 4.5s throttle is in play; a
-    # keyless 429 is a shared-IP event and the client already backs off for those.
     try:
         collected: dict = {}
         for start in (1, 501, 1001):
@@ -257,10 +252,6 @@ def page(result: dict) -> str:
         st = result["stats"]
         rho = st.get("rho1")
         rlv = st.get("r_levels")
-        # The caption states what was measured and refuses what cannot be claimed. The earlier
-        # version of this line called a 2.410-point span "only" and quoted it in sigma; on the
-        # committed fixtures that span is 33.9% of the mean, and a sigma of a unit-root series
-        # is not evidence. Both were corrected, and a test now recomputes them from the data.
         lede = (
             f"CMC20 against CMC100, both rebased to {st['base']:g}, differenced, and plotted in "
             f"<strong>percentage points</strong>. {result['n']} paired observations, "
@@ -323,9 +314,6 @@ class Handler(BaseHTTPRequestHandler):
     offline = True
     days = DEFAULT_WINDOW_DAYS
 
-    # A server-built page with no external resources and only inline styles needs a policy this
-    # tight. 'unsafe-inline' is permitted for style only because the CSS is emitted inline by
-    # this process; there is no script on the page, so script-src needs no exception.
     CSP = ("default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; "
            "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
@@ -340,7 +328,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
-        if not head_only:                       # HEAD must carry the headers and no body
+        if not head_only:
             self.wfile.write(raw)
 
     def version_string(self) -> str:
@@ -355,7 +343,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route(self, head_only: bool) -> None:
         u = urlparse(self.path)
-        # the window control submits ?days=N; it is the same code path as --days
         q = parse_qs(u.query or "")
         if "days" in q:
             try:
@@ -386,19 +373,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send("not found", 404, "text/plain; charset=utf-8", head_only=head_only)
 
     def log_message(self, fmt: str, *args) -> None:
-        # Deliberately formats with %s and writes the result in ONE call, rather than
-        # concatenating a literal prefix onto the raw format string. CPython's
-        # http.server scrubs control characters out of the *request line* before handing it to
-        # log_message; that scrubbing is applied to the argument, and prepending a literal to the
-        # format string is the pattern that made it ineffective in the first place. Kept minimal
-        # on purpose -- this override exists to be quiet, not to reimplement logging.
         sys.stderr.write("[tabula] %s\n" % (fmt % args))
 
 
-# The interpreter floor is a SECURITY floor, not a style preference: 3.12.13 carries the
-# gh-119452 http.server denial-of-service fix, and 3.12.14 is the last 3.12 release with
-# binary installers. 3.13 is the recommended target -- 3.12 is already in security-only,
-# source-only status with no further installers scheduled.
 MIN_PYTHON = (3, 12, 13)
 RECOMMENDED_PYTHON = (3, 13)
 

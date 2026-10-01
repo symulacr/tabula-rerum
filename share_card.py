@@ -37,11 +37,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "apps" / "api"))
 
-# Tried in order. `chrome-headless-shell` is the separate old-headless binary since ~132.
 CANDIDATES = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
               "chrome-headless-shell")
 
-W, H = 1200, 630          # the OG-image ratio most platforms crop to
+W, H = 1200, 630
 
 
 def find_chrome() -> str | None:
@@ -73,8 +72,6 @@ def render(chrome: str, html_path: Path, png_path: Path, port: int = 8123) -> No
             f"--screenshot={png_path}", f"http://127.0.0.1:{port}/",
         ]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        # do NOT gate on returncode: it is 0 for a typo'd flag, a missing file and a total
-        # failure alike. Check the artefact instead.
         if not png_path.is_file() or png_path.stat().st_size == 0:
             raise RuntimeError(f"chrome produced no image\n{r.stderr[-600:]}")
     finally:

@@ -17,8 +17,6 @@ class TransformError(ValueError):
     """Raised when a transformation cannot be performed. Never silently approximated."""
 
 
-# --- level transforms --------------------------------------------------------
-
 def rebase(values: Sequence[float], base: float = 100.0) -> list[float]:
     """Rebase a series to `base` at its first observation.
 
@@ -60,8 +58,6 @@ def ratio(a: Sequence[float], b: Sequence[float]) -> list[float]:
         out.append(x / y)
     return out
 
-
-# --- dispersion --------------------------------------------------------------
 
 def stdev(values: Sequence[float]) -> Optional[float]:
     """Population standard deviation. The series IS the population."""
@@ -150,7 +146,7 @@ def effective_n(values: Sequence[float]) -> Optional[int]:
     if rho is None or n == 0:
         return None
     if rho >= 1.0:
-        return 1                      # perfectly persistent: one observation's worth of information
+        return 1
     if rho <= -1.0:
         return n
     inflation = math.sqrt((1.0 + rho) / (1.0 - rho))
@@ -173,12 +169,9 @@ def percentile_rank(values: Sequence[float]) -> list[Optional[float]]:
     for i, v in present:
         below = sum(1 for _, w in present if w < v)
         equal = sum(1 for _, w in present if w == v)
-        # midpoint rank, so ties do not depend on position
         out[i] = 100.0 * (below + (equal - 1) / 2.0) / (m - 1) if m > 1 else 50.0
     return out
 
-
-# --- the flagship computation ------------------------------------------------
 
 def flagship(win: Window, a: str, b: str, base: float = 100.0) -> dict:
     """CMC20 vs CMC100. Returns chart-ready data plus the numbers to print.
@@ -220,14 +213,12 @@ def flagship(win: Window, a: str, b: str, base: float = 100.0) -> dict:
     raw_sd = stdev(raw_spread)
     raw_mean = mean(raw_spread)
 
-    # --- the honesty block, all measured here ---
     rho1 = lag1_autocorrelation(spread)
     n_eff = effective_n(spread)
     pct = percentile_rank(spread)
     raw_span = (max(raw_spread) - min(raw_spread)) if raw_spread else None
     raw_span_pct_of_mean = (100.0 * raw_span / raw_mean) if (raw_span and raw_mean) else None
     raw_span_sigma = (raw_span / raw_sd) if raw_sd else None
-    # how strongly the two indices move together -- the reason the spread is near-noise
     r_levels = _pearson(va, vb)
 
     axis = render_axis(win.series, win.start, win.end)
@@ -247,7 +238,6 @@ def flagship(win: Window, a: str, b: str, base: float = 100.0) -> dict:
             "base": base,
             "mean_spread": mean_spread,
             "sd_spread": sd_spread,
-            # z_unit is deliberately NOT called a unit of evidence
             "z_unit": "standard deviations of the rebased spread (descriptive only)",
             "headline_unit": "percentage points of rebased spread",
             "rho1": rho1,
@@ -278,8 +268,6 @@ def _pearson(x: Sequence[float], y: Sequence[float]) -> Optional[float]:
         return None
     return num / (dx * dy)
 
-
-# --- composition -------------------------------------------------------------
 
 def composition(series, day: Optional[dt.date] = None) -> list[dict]:
     """Per-day basket membership.

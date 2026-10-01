@@ -55,19 +55,15 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Optional
 
-# --- endpoints ---------------------------------------------------------------
 
 PRO_BASE = "https://pro-api.coinmarketcap.com"
 KEYLESS_BASE = PRO_BASE + "/public-api"
 HEADER_KEY = "X-CMC_PRO_API_KEY"
 USER_AGENT = "tabula-rerum/1.0 (+stdlib; contact via repo)"
 
-# Only these intervals exist. `1d` is rejected by the API with HTTP 400.
 INTERVALS = ("5m", "15m", "daily")
-# The API rejects count outside [1, 10]. This is a server-side hard cap, not a tuning choice.
 MAX_COUNT = 10
 
-# path key -> (path, interval-aware)
 PATHS: dict[str, str] = {
     "cmc20_latest": "/v3/index/cmc20-latest",
     "cmc100_latest": "/v3/index/cmc100-latest",
@@ -83,14 +79,12 @@ PATHS: dict[str, str] = {
     "simple_price": "/v2/simple/price",
 }
 
-# Paths that need no key. Verified against the official keyless reference.
 KEYLESS_PATHS = frozenset({
     "cmc20_latest", "cmc100_latest", "cmc20_historical", "cmc100_historical",
     "fng_latest", "fng_historical", "altcoin_season_latest", "altcoin_season_historical",
     "listings_latest", "quotes_latest", "global_latest", "simple_price",
 })
 
-# Paths with no keyless route. Never called unless allow_keyed=True AND a key is present.
 KEYED_ONLY = frozenset({"ohlcv_historical", "quotes_historical", "key_info"})
 KEYED_PATHS: dict[str, str] = {
     "ohlcv_historical": "/v2/cryptocurrency/ohlcv/historical",
@@ -98,8 +92,6 @@ KEYED_PATHS: dict[str, str] = {
     "key_info": "/v1/key/info",
 }
 
-# Official CMC error codes. 1022 is corpus-observed on the anonymous pool and is NOT in any
-# official table, so it is kept separate and labelled inferred.
 CMC_ERROR_CODES: dict[str, tuple[str, int, str]] = {
     "1001": ("API_KEY_INVALID", 401, "auth"),
     "1002": ("API_KEY_MISSING", 401, "auth"),
@@ -118,8 +110,6 @@ CMC_ERROR_CODES_INFERRED: dict[str, tuple[str, int, str]] = {
 }
 ALL_KNOWN_ERROR_CODES = tuple(CMC_ERROR_CODES) + tuple(CMC_ERROR_CODES_INFERRED)
 
-# Client-side sentinels. The prefix makes collision with a CMC numeric code impossible: no CMC
-# code is ever a non-numeric string, so `int(err)` raises on ours instead of silently aliasing.
 SENTINEL_NS = "cmc-client.local/"
 SENTINEL_NO_KEY = SENTINEL_NS + "no-api-key"
 SENTINEL_UNKNOWN_KEY = SENTINEL_NS + "unknown-path-key"
@@ -131,9 +121,6 @@ CLIENT_SENTINELS = (
     SENTINEL_BAD_PARAM, SENTINEL_RATE_LIMITED,
 )
 
-# The anonymous keyless pool is shared per IP and CMC does not publish the threshold.
-# Live observations: 8 requests at 4.5s spacing succeed; bursts produce 429/1011 or 429/1022.
-# So this is a floor for politeness, not a guarantee.
 MIN_INTERVAL_S = 4.5
 MAX_RETRIES = 3
 
@@ -171,7 +158,6 @@ def is_unrouted(body: Any) -> bool:
     code = str(status.get("error_code") or "")
     if code not in ("500", "503"):
         return False
-    # no `data` key at all -> there is nothing to retry, because nothing was ever routed
     return "data" not in body
 
 
@@ -213,8 +199,6 @@ def iso_z(day: dt.date) -> str:
     return f"{day.isoformat()}T00:00:00Z"
 
 
-# --- payload emptiness (defect E5) -------------------------------------------
-
 def is_semantically_empty(payload: Any) -> bool:
     """True when a body carries no usable content.
 
@@ -226,8 +210,6 @@ def is_semantically_empty(payload: Any) -> bool:
         return True
     if isinstance(payload, (list, tuple, str, dict)) and len(payload) == 0:
         return True
-    # index "latest" endpoints return a dict with value + constituents; an all-zero/None value
-    # with no constituents is also an empty answer.
     if isinstance(payload, dict):
         if not payload:
             return True
@@ -236,8 +218,6 @@ def is_semantically_empty(payload: Any) -> bool:
     return False
 
 
-# --- receipts (defect E6) ----------------------------------------------------
-
 @dataclass
 class Receipt:
     """One CMC call receipt. This is the provenance record the product is built around."""
@@ -245,7 +225,7 @@ class Receipt:
     path: str
     method: str
     params: dict
-    auth_mode: str                 # "keyless" | "keyed" | "none"
+    auth_mode: str
     http_status: Optional[int]
     error_code: Optional[str]
     verdict: str
@@ -290,8 +270,6 @@ class Response:
         return code in ("0", "200") and not is_semantically_empty(self.data)
 
 
-# --- the client --------------------------------------------------------------
-
 class CmcClient:
     """Stdlib CMC client. Keyless by default; a key is used only when explicitly permitted."""
 
@@ -304,8 +282,6 @@ class CmcClient:
         offline: bool = False,
         transport=None,
     ) -> None:
-        # The key is passed explicitly and is NEVER read from the environment. An exported key
-        # must not silently change behaviour — that was defect D7's root cause.
         self.api_key = api_key or None
         self.allow_keyed = bool(allow_keyed and self.api_key)
         self.timeout = timeout
@@ -314,10 +290,8 @@ class CmcClient:
         self._ctx = ssl.create_default_context()
         self._last_call = 0.0
         self.receipts: list[Receipt] = []
-        # injectable for tests
         self._transport = transport
 
-    # -- routing ------------------------------------------------------------
 
     def auth_mode_for(self, path_key: str) -> str:
         """DEFECT D7 FIX: keyless is preferred even when a key is present.
@@ -332,7 +306,6 @@ class CmcClient:
             return "keyed" if self.allow_keyed else "none"
         return "none"
 
-    # -- transport ----------------------------------------------------------
 
     def _throttle(self) -> None:
         if self.min_interval_s <= 0:
@@ -377,7 +350,7 @@ class CmcClient:
         url = base + path + (("?" + urllib.parse.urlencode(params)) if params else "")
         headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
         if auth_mode == "keyed":
-            headers[HEADER_KEY] = self.api_key  # never logged, never serialised
+            headers[HEADER_KEY] = self.api_key
 
         attempts = 0
         while True:
@@ -392,7 +365,7 @@ class CmcClient:
                     body = json.loads(exc.read().decode("utf-8", errors="replace") or "{}")
                 except Exception:
                     body = {}
-            except Exception as exc:  # network failure
+            except Exception as exc:
                 return self._fail(path_key, SENTINEL_RATE_LIMITED, 0,
                                   f"transport error: {type(exc).__name__}: {exc}",
                                   elapsed_ms=int((time.monotonic() - t0) * 1000))
@@ -403,9 +376,6 @@ class CmcClient:
             credit = status.get("credit_count")
             code_s = str(code) if code is not None else "0"
 
-            # UNROUTED, checked BEFORE any retry decision. A typo does not become correct on a
-            # second attempt, and the documented "retry 500" guidance would loop forever here.
-            # Verified live: an unrouted path returns HTTP 200 + error_code 500 + no `data`.
             if http_status == 200 and is_unrouted(body):
                 return self._record(path_key, path, params, auth_mode, http_status, code_s,
                                     None, credit, dict(VERDICT_UNROUTED), elapsed,
@@ -414,7 +384,6 @@ class CmcClient:
                                          "transient, and the API reports it in the same words a "
                                          "genuine 500 uses.")
 
-            # Retry ONLY on rate limits, and only for keyless-safe reads.
             if http_status == 429 and attempts <= MAX_RETRIES:
                 time.sleep(self.min_interval_s * (2 ** (attempts - 1)))
                 continue
@@ -451,7 +420,6 @@ class CmcClient:
                                 {"verdict": "ok", "name": None, "http": http_status,
                                  "class": None, "inferred": False}, elapsed)
 
-    # -- recording ----------------------------------------------------------
 
     def _record(self, path_key, path, params, auth_mode, http_status, code, data,
                 credit, verdict, elapsed, note="") -> Response:
@@ -479,7 +447,6 @@ class CmcClient:
                         error_code=code, auth_mode="none", credit_count=None,
                         receipt=r, note=note)
 
-    # -- window walk (defect E1) -------------------------------------------
 
     def walk_window(
         self,
@@ -521,9 +488,6 @@ class CmcClient:
                 if ts:
                     collected[ts] = row
             if len(collected) == before:
-                break                      # no new timestamps: we are at the start of history
-            # Advance the cursor. Note we must NOT stop when the returned window is full: with
-            # both bounds set the API fills from the window START, so a full page is the normal
-            # case, not the end of history. Only "no new points" terminates the walk.
+                break
             cursor_end = cursor_start
         return [collected[k] for k in sorted(collected)]

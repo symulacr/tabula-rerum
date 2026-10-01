@@ -33,11 +33,8 @@ from typing import Any, Iterable, Optional, Sequence
 
 TIME_FIELD_CANDIDATES = ("update_time", "timestamp", "date")
 
-# A window is analysed only if at least this fraction of its requested days are present in BOTH
-# series. Below it the window is dropped and the drop is recorded, never silently analysed.
 MIN_COVERAGE = 0.95
 
-# A window needs at least this many paired observations for its statistics to mean anything.
 MIN_PAIRED_POINTS = 30
 
 

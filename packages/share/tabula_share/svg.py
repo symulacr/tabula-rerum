@@ -18,30 +18,17 @@ import datetime as dt
 import html
 from typing import Optional, Sequence
 
-# Contrast measured with the WCAG 2.2 relative-luminance formula against the ground below.
-# The figures here are MEASURED, not asserted, and a test re-derives them (test_palette_contrast).
-# Earlier documentation claimed 15.9 / 7.0 / 5.1 / 5.4 / 5.0 / 5.3 / 6.1 -- five of those were
-# wrong. A product whose claim is trustworthy provenance cannot misreport its own audit.
-#   ink       16.03:1   text            (AAA)
-#   ink_muted  6.42:1   text            (AA, and AA-large)
-#   accent     4.56:1   text            (AA)
-#   series_a   6.41:1   graphical       (AA non-text, >3:1)
-#   series_b   5.47:1   graphical
-#   positive   6.03:1   graphical
-#   negative   7.01:1   graphical
-#   rule       1.35:1   DECORATIVE ONLY -- below the 3:1 of WCAG 1.4.11, so it must never be
-#                       the sole means of conveying structure. Gridlines and hairlines only.
 PALETTE = {
-    "ground": "#f7f7f4",       # L* ~97
+    "ground": "#f7f7f4",
     "surface": "#ffffff",
-    "ink": "#1c1b19",          # 16.03:1
-    "ink_muted": "#5c5a54",    # 6.42:1
-    "rule": "#d8d6d0",         # 1.35:1 -- decorative only
-    "accent": "#8a6d1f",       # 4.56:1 -- bronze, not the reference app's purple
-    "series_a": "#2f5d8a",     # 6.41:1
-    "series_b": "#8a5a2b",     # 5.47:1
-    "positive": "#1f6b45",     # 6.03:1
-    "negative": "#9b2c2c",     # 7.01:1
+    "ink": "#1c1b19",
+    "ink_muted": "#5c5a54",
+    "rule": "#d8d6d0",
+    "accent": "#8a6d1f",
+    "series_a": "#2f5d8a",
+    "series_b": "#8a5a2b",
+    "positive": "#1f6b45",
+    "negative": "#9b2c2c",
     "warn": "#8a6d1f",
 }
 
@@ -89,7 +76,6 @@ def render_spread_chart(
     if not result.get("analysable"):
         return _empty_panel(result.get("reason") or "no analysable window", width, height)
 
-    # plot the spread itself, not the z-score
     series_vals = [x for x in result["spread"] if x is not None]
     if not series_vals:
         return _empty_panel("no spread values for this window", width, height)
@@ -128,7 +114,6 @@ def render_spread_chart(
     )
     parts.append(f'<rect width="{width}" height="{height}" fill="{PALETTE["ground"]}"/>')
 
-    # gridlines + y labels, in percentage points
     for t in _ticks(lo, hi, 5):
         y = Y(t)
         parts.append(f'<line x1="{pad_l}" y1="{y:.1f}" x2="{pad_l + iw}" y2="{y:.1f}" '
@@ -136,7 +121,6 @@ def render_spread_chart(
         parts.append(f'<text x="{pad_l - 10}" y="{y + 4:.1f}" text-anchor="end" font-size="12" '
                      f'fill="{PALETTE["ink_muted"]}" '
                      f'style="font-variant-numeric:tabular-nums">{t:+.2f}pp</text>')
-    # zero line
     if lo < 0 < hi:
         y0 = Y(0)
         parts.append(f'<line x1="{pad_l}" y1="{y0:.1f}" x2="{pad_l + iw}" y2="{y0:.1f}" '
@@ -144,9 +128,6 @@ def render_spread_chart(
         parts.append(f'<text x="{pad_l + iw}" y="{y0 - 6:.1f}" text-anchor="end" font-size="11" '
                      f'fill="{PALETTE["ink_muted"]}">equal footing (0pp)</text>')
 
-    # THE SERIES — an explicit path that BREAKS on a None, so a gap renders as a gap and the
-    # x-axis of every later point stays where it belongs. A <polyline> cannot do this: it
-    # silently bridges the gap, which is the same defect class as the prohibited forward fill.
     d_parts: list[str] = []
     pen_down = False
     for i, v in enumerate(result["spread"]):
@@ -160,14 +141,12 @@ def render_spread_chart(
         parts.append(f'<path d="{"".join(d_parts)}" fill="none" stroke="{PALETTE["series_a"]}" '
                      f'stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>')
 
-    # x labels: first, middle, last only
     for i in (0, n // 2, n - 1):
         d = result["days"][i]
         anchor = "start" if i == 0 else ("end" if i == n - 1 else "middle")
         parts.append(f'<text x="{X(i):.1f}" y="{pad_t + ih + 22}" text-anchor="{anchor}" '
                      f'font-size="12" fill="{PALETTE["ink_muted"]}">{esc(d)}</text>')
 
-    # caption: printed values, measured at render time, including the honesty block
     cap = caption or (
         f"n={n} days · n_eff={st.get('n_eff')} · rho1={_fmt(st.get('rho1'), 3)} · "
         f"r(levels)={_fmt(st.get('r_levels'), 4)} · mean {_fmt(st['mean_spread'], 3)}pp · "

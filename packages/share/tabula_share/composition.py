@@ -18,7 +18,6 @@ from typing import Optional
 
 from .svg import PALETTE, esc, _fmt
 
-# Weights are shown as a horizontal bar plus a number, so magnitude is never carried by colour.
 BAR_MAX = 100.0
 
 
