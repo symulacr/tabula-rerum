@@ -137,9 +137,13 @@ def effective_n(values: Sequence[float]) -> Optional[int]:
 
         n_eff = n / sqrt((1 + rho) / (1 - rho))
 
-    At rho = 0 this is n. At rho = 0.947 a 70-day window has n_eff = 6. Reporting n = 70 for
-    that window overstates the evidence by more than an order of magnitude, so the caption must
-    carry n_eff alongside n, or it is misleading by construction.
+    At rho = 0 this is n. The committed 70-day fixture window has rho1 = 0.7625, so its
+    inflation factor is 2.72 and **n_eff = 70 / 2.72 = 26**.
+
+    The value 2.72 is the inflation factor, NOT n_eff. An earlier version of this docstring
+    reported "n_eff = 6" by dividing 70 by 11.8 as though 11.8 were the answer rather than the
+    divisor. Reporting n = 70 for this window overstates the evidence by ~2.7x, so the caption
+    must carry n_eff alongside n, or it is misleading by construction.
     """
     n = len(values)
     rho = lag1_autocorrelation(values)
