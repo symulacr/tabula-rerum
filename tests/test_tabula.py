@@ -947,5 +947,62 @@ class TestShareCard(unittest.TestCase):
         self.assertIn("byte-identical", r.stdout)
 
 
+class TestInterpreterFloor(unittest.TestCase):
+    """P3.4: the interpreter floor is a security floor, and the app must say so out loud."""
+
+    def test_the_floor_is_declared_and_is_a_patch_level(self):
+        from tabula.server import MIN_PYTHON, RECOMMENDED_PYTHON
+        self.assertEqual(MIN_PYTHON, (3, 12, 13),
+                         "3.12.13 carries the gh-119452 http.server DoS fix")
+        self.assertGreaterEqual(MIN_PYTHON[2], 13)
+        self.assertGreaterEqual(RECOMMENDED_PYTHON, (3, 13))
+
+    def test_pyproject_declares_the_same_floor(self):
+        toml = (ROOT / "pyproject.toml").read_text()
+        self.assertIn('requires-python = ">=3.12.13"', toml)
+
+    def test_pyproject_has_no_build_system_or_dependency_table(self):
+        """Parse the TOML, don't grep it: those words appear in a comment explaining why they
+        are absent, and a substring search would be testing the comment."""
+        try:
+            import tomllib
+        except ModuleNotFoundError:                       # 3.10 and earlier
+            self.skipTest("tomllib needs 3.11+")
+        with open(ROOT / "pyproject.toml", "rb") as f:
+            toml = tomllib.load(f)
+        self.assertNotIn("build-system", toml,
+                         "a [build-system] table would let PEP 517 fabricate a wheel")
+        self.assertNotIn("dependencies", toml["project"],
+                         "the runtime is standard library only")
+        self.assertNotIn("optional-dependencies", toml["project"])
+        # dev tooling is configured, and none of it is a runtime requirement
+        self.assertIn("tool", toml)
+        self.assertIn("ruff", toml["tool"])
+        self.assertIn("mypy", toml["tool"])
+
+    def test_check_interpreter_warns_on_a_too_old_interpreter(self):
+        import sys as _sys
+        from tabula import server as S
+
+        class FakeVI(tuple):
+            major = property(lambda s: s[0])
+            minor = property(lambda s: s[1])
+            micro = property(lambda s: s[2])
+
+        real = _sys.version_info
+        try:
+            _sys.version_info = FakeVI((3, 12, 3))     # below the floor
+            msg = S.check_interpreter()
+            self.assertIsNotNone(msg)
+            self.assertIn("gh-119452", msg)
+            self.assertIn("3.12.3", msg)
+            _sys.version_info = FakeVI((3, 13, 0))     # above the floor
+            self.assertIsNone(S.check_interpreter())
+            _sys.version_info = FakeVI((3, 12, 13))    # exactly the floor
+            self.assertIsNone(S.check_interpreter(), "the floor itself must not warn")
+        finally:
+            _sys.version_info = real
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -392,13 +392,40 @@ class Handler(BaseHTTPRequestHandler):
             self._send("not found", 404, "text/plain; charset=utf-8", head_only=head_only)
 
     def log_message(self, fmt: str, *args) -> None:
-        # Deliberately does NOT prefix the caller-controlled path, so the control-character
-        # scrubbing that CPython added in 3.12.13 still applies.
+        # Deliberately formats with %s and writes the result in ONE call, rather than
+        # concatenating a literal prefix onto the raw format string. CPython's
+        # http.server scrubs control characters out of the *request line* before handing it to
+        # log_message; that scrubbing is applied to the argument, and prepending a literal to the
+        # format string is the pattern that made it ineffective in the first place. Kept minimal
+        # on purpose -- this override exists to be quiet, not to reimplement logging.
         sys.stderr.write("[tabula] %s\n" % (fmt % args))
+
+
+# The interpreter floor is a SECURITY floor, not a style preference: 3.12.13 carries the
+# gh-119452 http.server denial-of-service fix, and 3.12.14 is the last 3.12 release with
+# binary installers. 3.13 is the recommended target -- 3.12 is already in security-only,
+# source-only status with no further installers scheduled.
+MIN_PYTHON = (3, 12, 13)
+RECOMMENDED_PYTHON = (3, 13)
+
+
+def check_interpreter() -> Optional[str]:
+    """Return a warning if the running interpreter is below the security floor."""
+    v = sys.version_info
+    have = (v.major, v.minor, v.micro)
+    if have < MIN_PYTHON:
+        return (f"Python {'.'.join(map(str, MIN_PYTHON))}+ is required: this interpreter is "
+                f"{'.'.join(map(str, have))}, which predates the gh-119452 http.server "
+                f"denial-of-service fix. The app will run, but it is not the version this was "
+                f"tested or hardened against. 3.13 is recommended.")
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(argv if argv is not None else sys.argv[1:])
+    warn = check_interpreter()
+    if warn:
+        print("WARNING: " + warn, file=sys.stderr)
     offline = "--live" not in argv
     port = 8099
     for i, a in enumerate(argv):
