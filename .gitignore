@@ -12,10 +12,15 @@ __pycache__/
 *.cc
 *.rst
 CHANGELOG*.md
-pyproject.toml*
 requirements*.txt
 setup.py
 setup.cfg
+
+# pyproject.toml is deliberately NOT ignored. It was swept into the list above as scratch,
+# then became a real, required file: the test suite parses it, and a clone without it fails
+# two tests. `!pyproject.toml` is here so a re-added broad rule cannot silently hide it
+# again; TestPublishedTreeIsComplete fails the build if this file ever goes untracked.
+!pyproject.toml
 
 # --- credentials: never commit these ---
 .env

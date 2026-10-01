@@ -1078,5 +1078,99 @@ class TestInterpreterFloor(unittest.TestCase):
         self.assertEqual(len(sent["altseason"]), 1, "altseason must still be fetched")
 
 
+class TestPublishedTreeIsComplete(unittest.TestCase):
+    """A clone must be able to run the suite.
+
+    Found the hard way: `.gitignore` carried a blanket `pyproject.toml*` from a "scratch that
+    leaked in" section. The file was added and tested locally every day, `git status` stayed
+    clean because an ignored file does not show as modified, and a fresh clone failed two
+    tests. Ignored files are invisible to status, so this class of bug cannot be caught by
+    looking at the working tree -- it has to be asserted against what git will actually send.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import subprocess as sp
+        try:
+            out = sp.run(["git", "ls-files"], cwd=str(ROOT), capture_output=True,
+                         text=True, timeout=60).stdout.split()
+        except (OSError, FileNotFoundError):
+            raise unittest.SkipTest("git unavailable; cannot enumerate the published tree")
+        if not out:
+            raise unittest.SkipTest("not a git checkout")
+        cls.tracked = set(out)
+
+    def test_pyproject_toml_is_tracked(self):
+        self.assertIn("pyproject.toml", self.tracked,
+                      "the suite parses it, so a clone without it fails")
+
+    def test_pyproject_toml_is_not_ignored(self):
+        import subprocess as sp
+        r = sp.run(["git", "check-ignore", "-v", "pyproject.toml"], cwd=str(ROOT),
+                   capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(r.returncode, 0,
+                            "pyproject.toml is still matched by a .gitignore rule")
+
+    def test_every_file_the_suite_reads_is_tracked(self):
+        """Close the loop generally: whatever the tests touch must be published."""
+        needed = ["pyproject.toml", "run.py", "share_card.py", "demo.sh",
+                  "tests/test_tabula.py", "apps/api/tabula/client.py",
+                  "apps/api/tabula/server.py", "packages/features/tabula_features/align.py",
+                  "packages/share/tabula_share/svg.py",
+                  "evidence/fixtures/cmc20_historical.json",
+                  "evidence/fixtures/cmc100_historical.json",
+                  "evidence/fixtures/fng_historical.json"]
+        missing = [n for n in needed if n not in self.tracked]
+        self.assertEqual(missing, [], f"referenced but untracked: {missing}")
+
+    def test_no_ignored_python_file_is_imported_by_the_app(self):
+        """An ignored module would import locally and 404 for everyone else."""
+        import io
+        import tokenize
+        import os as _os
+        ignored = []
+        for root, dirs, files in _os.walk(str(ROOT)):
+            dirs[:] = [d for d in dirs
+                       if d not in (".git", "__pycache__", ".mypy_cache", ".ruff_cache",
+                                    ".pytest_cache", ".omx", "evidence")]
+            for fn in files:
+                if not fn.endswith(".py"):
+                    continue
+                p = _os.path.join(root, fn)
+                if _os.path.relpath(p, str(ROOT)) in self.tracked:
+                    continue
+                with open(p, encoding="utf-8") as f:
+                    src = f.read()
+                try:
+                    toks = [t for t in tokenize.generate_tokens(io.StringIO(src).readline)
+                            if t[0] in (tokenize.IMPORT_NAME, tokenize.IMPORT_FROM,
+                                        tokenize.STRING)]
+                except tokenize.TokenError:
+                    continue
+                for t in toks:
+                    if any(k in t.string for k in ("tabula", "share_card")):
+                        ignored.append(_os.path.relpath(p, str(ROOT)))
+                        break
+        self.assertEqual(ignored, [],
+                         f"untracked but imported: {sorted(set(ignored))}")
+
+    def test_the_clone_would_actually_pass(self):
+        """The real gate: run the suite in a throwaway clone of the committed tree."""
+        import os
+        import subprocess as sp
+        import tempfile
+        dest = tempfile.mkdtemp(prefix="tabula-clone-")
+        c = sp.run(["git", "clone", "--depth", "1", str(ROOT), dest],
+                   capture_output=True, text=True, timeout=180)
+        if c.returncode:
+            self.skipTest(f"clone failed: {c.stderr.strip()[:120]}")
+        env = {k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}
+        r = sp.run([sys.executable, "run.py", "--test"], cwd=dest, capture_output=True,
+                   text=True, env=env, timeout=280)
+        tail = (r.stdout + r.stderr).strip().splitlines()[-1]
+        self.assertEqual(r.returncode, 0,
+                         f"a fresh clone of the committed tree does not pass: {tail}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

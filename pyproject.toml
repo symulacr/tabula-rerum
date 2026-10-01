@@ -1,0 +1,67 @@
+[project]
+name = "tabula-rerum"
+version = "1.1.0"
+description = "A CoinMarketCap workspace that measures whether a market claim is statistically defensible."
+requires-python = ">=3.12.13"
+# NOTE: there is deliberately NO build-system table and NO dependencies list here. The runtime
+# is Python standard library only (TABULA-CONTRACT.md section 3), and omitting the build-system
+# key is what stops a PEP 517 frontend fabricating a wheel out of a project that has no build
+# step. Everything below is DEV tooling only -- it is never imported by the shipped
+# application, and `python3 run.py` works on a machine that has none of it installed.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["apps/api", "packages/features", "packages/share", "tests"]
+
+[tool.ruff.lint]
+# ruff 0.16 defaults to 413 rules. An explicit selection is the point: this list is a decision,
+# not whatever the default happened to be this month.
+select = ["E", "F", "W", "N", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+  "E501",    # line length is handled by the formatter
+  "SIM108",  # a ternary is not always clearer than an if
+  "RUF012",  # mutable class attrs are intentional in the client
+]
+# `N802` is the stdlib's do_GET/do_HEAD naming; that is the API we are implementing.
+per-file-ignores = { "apps/api/tabula/server.py" = ["N802"] }
+
+[tool.ruff.lint.isort]
+known-first-party = ["tabula", "tabula_features", "tabula_share"]
+
+[tool.mypy]
+python_version = "3.12"
+# No `strict = true` on the whole tree: it surfaces ~116 errors against ~33 today, and a
+# migration plan beats a wall of red. The shipped code IS strict-checked; see the override.
+warn_unused_configs = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+# NOTE: mypy's `overrides` is ONE table of lists, not an array of tables. Declaring it three
+# times with [[...]] is a TOMLDecodeError, and the config simply does not load. The first
+# parse-and-assert in the test suite is what catches this class of mistake.
+
+[tool.mypy.overrides]
+# The feature and share layers are pure functions with no I/O. Hold them to the strict bar.
+module = ["tabula_features.*", "tabula_share.*"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_unused_ignores = true
+
+[tool.mypy-test-overrides]
+# The client and server do I/O and use untyped stdlib shims; strictness there is not worth the
+# annotation noise, so they are deliberately not held to the bar above.
+module = ["tabula.*", "test_tabula"]
+disallow_untyped_defs = false
+warn_unused_ignores = false
+
+[tool.coverage.run]
+branch = false          # branch coverage needs sys.monitoring, i.e. Python 3.14+
+source = ["apps", "packages"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+# A provenance product may not ship an unmeasured branch silently.
+fail_under = 70
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:"]
