@@ -1155,21 +1155,42 @@ class TestPublishedTreeIsComplete(unittest.TestCase):
                          f"untracked but imported: {sorted(set(ignored))}")
 
     def test_the_clone_would_actually_pass(self):
-        """The real gate: run the suite in a throwaway clone of the committed tree."""
+        """The deep gate: run the suite in a throwaway clone of the committed tree.
+
+        Opt-in via TABULA_RUN_CLONE_GATE=1, for two reasons. It clones the committed tree, so
+        it is reporting on HEAD rather than on the working directory -- which is exactly what
+        makes it valuable and also why it cannot pass before the fix is committed. And the
+        clone runs the suite, which contains this test: without the flag check below the
+        clone clones again, forever. A shipped test suite must not spawn clones by default.
+
+        Run it with:  TABULA_RUN_CLONE_GATE=1 python3 run.py --test
+        """
         import os
         import subprocess as sp
         import tempfile
+        if not os.environ.get("TABULA_RUN_CLONE_GATE"):
+            self.skipTest("set TABULA_RUN_CLONE_GATE=1 to run the clone gate")
         dest = tempfile.mkdtemp(prefix="tabula-clone-")
         c = sp.run(["git", "clone", "--depth", "1", str(ROOT), dest],
                    capture_output=True, text=True, timeout=180)
         if c.returncode:
             self.skipTest(f"clone failed: {c.stderr.strip()[:120]}")
-        env = {k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("GITHUB_TOKEN", "GITHUB_PERSONAL_ACCESS_TOKEN")}
         r = sp.run([sys.executable, "run.py", "--test"], cwd=dest, capture_output=True,
                    text=True, env=env, timeout=280)
         tail = (r.stdout + r.stderr).strip().splitlines()[-1]
         self.assertEqual(r.returncode, 0,
                          f"a fresh clone of the committed tree does not pass: {tail}")
+
+    def test_the_clone_gate_is_not_recursive_by_construction(self):
+        """The failure mode of the test above is silent runaway forking, so pin the guard."""
+        src = (ROOT / "tests" / "test_tabula.py").read_text()
+        i = src.find("def test_the_clone_would_actually_pass")
+        self.assertGreater(i, 0)
+        body = src[i:i + 1200]
+        self.assertIn("TABULA_RUN_CLONE_GATE", body,
+                      "an ungated clone-inside-clone test forks without bound")
 
 
 if __name__ == "__main__":
