@@ -69,6 +69,10 @@ statistics, outer join for rendering, windows dropped below 95% coverage.
    silently if you wire it as-is. Normalised, and pinned by a test.
 7. **Altcoin Season honours only `timeframe`** (`7d`/`30d`/`90d`). `limit`, `time_start`,
    `time_end` and `interval` are accepted and **silently ignored** — false confidence.
+8. **A keyless 429 is a shared-IP event, not yours.** The anonymous pool is per-IP, so a 1011
+   can arrive on a request that broke no rule of yours. It is therefore surfaced in the notes as
+   *rate-limited*, never as a defect in the data, and a partial fetch degrades to the points it
+   did get rather than to an empty panel.
 
 ## Limitations, stated plainly
 

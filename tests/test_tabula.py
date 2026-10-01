@@ -1004,5 +1004,60 @@ class TestInterpreterFloor(unittest.TestCase):
             _sys.version_info = real
 
 
+    def test_a_rate_limited_fetch_degrades_loudly_not_silently(self):
+        """Verified live: a keyless 1011 can hit a F&G page. It must be labelled, not swallowed."""
+        from tabula.server import load_sentiment
+
+        class RateLimited:
+            def get(self, *a, **k):
+                class R:
+                    ok = False
+                    data = None
+                    error_code = "1011"
+
+                    class receipt:
+                        error_name = "IP_RATE_LIMIT_REACHED"
+                return R()
+
+        sent = load_sentiment(RateLimited(), False)
+        self.assertEqual(sent["fng"], [], "no data, so no points -- correct")
+        joined = " ".join(sent["notes"])
+        self.assertIn("IP_RATE_LIMIT_REACHED", joined)
+        self.assertIn("shared pool", joined)
+        self.assertIn("not a bug", joined,
+                      "a shared-IP 429 is not a defect in the data; say so")
+
+    def test_a_rate_limit_does_not_abort_the_altseason_panel(self):
+        """One panel failing must not take the other one down with it."""
+        from tabula.server import load_sentiment
+
+        class Mixed:
+            def __init__(self):
+                self.n = 0
+
+            def get(self, key, **k):
+                self.n += 1
+                if key == "fng_historical":
+                    class R:
+                        ok = False
+                        data = None
+                        error_code = "1011"
+
+                        class receipt:
+                            error_name = "IP_RATE_LIMIT_REACHED"
+                    return R()
+                class R:
+                    ok = True
+                    error_code = "0"
+                    data = {"timeframe": "90d", "points": [
+                        {"timestamp": "2026-07-04T00:00:00Z", "altcoin_index": 51}]}
+                    receipt = type("r", (), {"error_name": None})()
+                return R()
+
+        sent = load_sentiment(Mixed(), False)
+        self.assertEqual(sent["fng"], [])
+        self.assertEqual(len(sent["altseason"]), 1, "altseason must still be fetched")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

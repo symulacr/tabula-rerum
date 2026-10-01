@@ -77,20 +77,6 @@ def _fixture(name: str):
     return json.loads(p.read_text())
 
 
-def _epoch_to_date(ts: Any) -> Optional[dt.date]:
-    """Fear & Greed returns `timestamp` as an EPOCH STRING, unlike the index endpoints which use
-    `update_time`. It also arrives NEWEST-FIRST. Both must be normalised or the axis inverts.
-
-    Verified live: `/v3/fear-and-greed/historical?limit=500` returns
-    [{"timestamp": "1790640000", "value": 68, "value_classification": "Greed"}, ...]
-    descending from the newest day.
-    """
-    try:
-        return dt.datetime.fromtimestamp(int(ts), dt.timezone.utc).date()
-    except (TypeError, ValueError):
-        return None
-
-
 def _to_date(raw: Any) -> Optional[dt.date]:
     """Accept either an epoch string or an ISO-8601 timestamp.
 
@@ -160,22 +146,30 @@ def load_sentiment(client: CmcClient, offline: bool) -> dict:
         return out
 
     # live. F&G pages at 500 with a 1-based `start` offset, newest-first per page.
+    # NOTE: this runs AFTER load_series, so the client's own 4.5s throttle is in play; a
+    # keyless 429 is a shared-IP event and the client already backs off for those.
     try:
         collected: dict = {}
         for start in (1, 501, 1001):
             r = client.get("fng_historical", limit=500, start=start)
             if not r.ok:
-                out["notes"].append(f"F&G page start={start} failed: "
-                                    f"{r.receipt.error_name or r.error_code}")
+                reason = r.receipt.error_name or r.error_code
+                out["notes"].append(f"F&G page start={start} FAILED: {reason}"
+                                    + (" (keyless IP rate limit -- shared pool, not a bug)"
+                                       if "RATE_LIMIT" in str(reason) or reason == "1011"
+                                       else ""))
                 break
             for p in (r.data or []):
-                d = _epoch_to_date(p.get("timestamp"))
+                d = _to_date(p.get("timestamp"))
                 if d:
                     collected[d] = (d, p.get("value"), p.get("value_classification"))
             if len(r.data or []) < 500:
                 break
         out["fng"] = [collected[k] for k in sorted(collected)]
-        out["notes"].append(f"F&G live ({len(out['fng'])} points, ascending)")
+        if out["fng"]:
+            out["notes"].append(f"F&G live ({len(out['fng'])} points, ascending)")
+        else:
+            out["notes"].append("F&G: no points fetched this run (see the receipt table)")
     except Exception as exc:                                        # noqa: BLE001
         out["notes"].append(f"F&G live failed: {type(exc).__name__}: {exc}")
 
