@@ -22,10 +22,20 @@ class TransformError(ValueError):
 def rebase(values: Sequence[float], base: float = 100.0) -> list[float]:
     """Rebase a series to `base` at its first observation.
 
-    Why this exists: the raw CMC20-CMC100 difference is visually flat. Measured over 9 daily
-    points, mean 7.981, sd 0.177, span 0.520 — 6.5% of the mean, because the two indices sit ~170
-    apart and move nearly in parallel. The "25-point regime geometry" the concept rests on does
-    NOT exist in raw index values. Rebasing then differencing exposes it.
+    Why this exists: rebasing makes two index levels comparable, because CMC20 and CMC100 sit
+    roughly 170 points apart and so their raw difference is dominated by that constant offset
+    rather than by anything about the market.
+
+    MEASURED, on the committed fixtures (70 daily points, 2026-07-19 to 2026-09-26):
+        raw difference      mean 7.103, sd 0.872, span 2.410 = 33.9% of the mean
+        rebased difference mean 0.150, sd 0.186
+        r(CMC20, CMC100)    0.999902
+
+    An earlier draft of this project claimed the raw spread was "visually flat" -- "span 0.520,
+    6.5% of the mean", measured over only 9 points. That was wrong, and wrong in the dangerous
+    direction: over a real window the span is a THIRD of the mean and the difference drifts
+    +29.6%. Flatness was never the reason to normalise. The honest reasons are the constant
+    offset above, and the fact that r = 0.999902 means the difference is close to noise.
     """
     if not values:
         return []
