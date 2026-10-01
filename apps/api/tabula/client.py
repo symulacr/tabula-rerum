@@ -142,6 +142,39 @@ def is_client_sentinel(err: Any) -> bool:
     return isinstance(err, str) and err.startswith(SENTINEL_NS)
 
 
+def is_unrouted(body: Any) -> bool:
+    """True when the API answered 200 with an error and NO `data` key at all.
+
+    This is the single most important quirk this client encodes, and it is live-verified.
+
+    An unrouted path -- `/v9/totally/bogus`, a misspelled version, a path that simply does not
+    exist -- answers:
+
+        HTTP 200
+        {"status":{"timestamp":"...","error_code":"500",
+                   "error_message":"The system is busy, please try again later!",
+                   "elapsed":"0","credit_count":0}}
+
+    That body is BYTE-IDENTICAL to a genuine transient error, and it directly contradicts the
+    documented "retry 500" guidance. A client that follows the docs retries forever and never
+    learns the path was a typo.
+
+    The discriminator is the ABSENCE of a `data` key. A real transient 500 has no `data` either,
+    so this cannot distinguish the two on the wire -- and that is exactly the point worth
+    publishing. What it CAN do is stop treating the case as retryable, because a typo does not
+    become correct on a second attempt. So the client classifies it as UNROUTED, never retries
+    it, and says so in the receipt.
+    """
+    if not isinstance(body, dict):
+        return False
+    status = body.get("status") or {}
+    code = str(status.get("error_code") or "")
+    if code not in ("500", "503"):
+        return False
+    # no `data` key at all -> there is nothing to retry, because nothing was ever routed
+    return "data" not in body
+
+
 def classify_error_code(err: Any) -> dict:
     """Map a server error code, or a client sentinel, to a usable verdict."""
     if err is None:
@@ -165,6 +198,10 @@ def classify_error_code(err: Any) -> dict:
                 "inferred": False}
     return {"verdict": "server", "name": f"numeric_{numeric}", "http": None, "class": None,
             "inferred": False}
+
+
+VERDICT_UNROUTED = {"verdict": "unrouted", "name": "UNROUTED_PATH", "http": 200,
+                    "class": "client", "inferred": False}
 
 
 def utc_now() -> str:
@@ -365,6 +402,17 @@ class CmcClient:
             code = status.get("error_code")
             credit = status.get("credit_count")
             code_s = str(code) if code is not None else "0"
+
+            # UNROUTED, checked BEFORE any retry decision. A typo does not become correct on a
+            # second attempt, and the documented "retry 500" guidance would loop forever here.
+            # Verified live: an unrouted path returns HTTP 200 + error_code 500 + no `data`.
+            if http_status == 200 and is_unrouted(body):
+                return self._record(path_key, path, params, auth_mode, http_status, code_s,
+                                    None, credit, dict(VERDICT_UNROUTED), elapsed,
+                                    note="UNROUTED: HTTP 200 + error_code 500 + no 'data' key. "
+                                         "The path does not exist. NOT retried -- a typo is not "
+                                         "transient, and the API reports it in the same words a "
+                                         "genuine 500 uses.")
 
             # Retry ONLY on rate limits, and only for keyless-safe reads.
             if http_status == 429 and attempts <= MAX_RETRIES:

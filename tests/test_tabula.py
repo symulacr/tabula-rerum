@@ -24,7 +24,8 @@ for p in (ROOT / "apps" / "api", ROOT / "packages" / "features", ROOT / "package
     sys.path.insert(0, str(p))
 
 from tabula import client as C                                    # noqa: E402
-from tabula.client import CmcClient, classify_error_code, is_client_sentinel  # noqa: E402
+from tabula.client import (CmcClient, classify_error_code, is_client_sentinel,  # noqa: E402
+                          is_unrouted)
 from tabula_features.align import (MIN_COVERAGE, Series, build_window,          # noqa: E402
                                    paired_values, render_axis)
 from tabula_features.transforms import (TransformError, flagship, rebase,       # noqa: E402
@@ -424,6 +425,67 @@ class TestEndToEnd(unittest.TestCase):
         r = build_result(days=365, offline=True)
         self.assertTrue(r["offline"])
         self.assertEqual(r["auth_modes"], ["none"])
+
+
+class TestUnroutedDiscriminator(unittest.TestCase):
+    """P0.6: an unrouted path must be told apart from a transient error.
+
+    The README claims this client classifies an unrouted path as UNROUTED and never retries it.
+    This is the test that makes that claim true rather than aspirational.
+    """
+
+    # Exactly the bytes captured live from /public-api/v9/totally/bogus
+    UNROUTED_BODY = {"status": {"timestamp": "2026-09-30T23:50:45.610Z", "error_code": "500",
+                                "error_message": "The system is busy, please try again later!",
+                                "elapsed": "0", "credit_count": 0}}
+
+    def test_unrouted_shape_is_detected(self):
+        self.assertTrue(is_unrouted(self.UNROUTED_BODY))
+
+    def test_a_good_response_is_not_unrouted(self):
+        good = {"status": {"error_code": "0", "credit_count": 1},
+                "data": {"id": "cmc20", "value": 177.8}}
+        self.assertFalse(is_unrouted(good))
+
+    def test_a_200_with_data_but_an_error_is_not_unrouted(self):
+        """error_code 500 WITH a data key is something else -- not an unrouted path."""
+        self.assertFalse(is_unrouted({"status": {"error_code": "500"}, "data": [1, 2]}))
+
+    def test_a_rate_limit_is_not_unrouted(self):
+        """429/1011 must still be retryable. Do not let this swallow rate limits."""
+        body = {"status": {"error_code": "1011", "error_message": "IP rate limit"}}
+        self.assertFalse(is_unrouted(body))
+
+    def test_unrouted_is_never_retried(self):
+        """The whole point: one attempt, not MAX_RETRIES."""
+        calls = {"n": 0}
+
+        def transport(url, headers):
+            calls["n"] += 1
+            return 200, dict(self.UNROUTED_BODY)
+
+        c = CmcClient(transport=transport, min_interval_s=0.0)
+        r = c.get("cmc20_historical", interval="daily", count=10)
+        self.assertEqual(calls["n"], 1, "an unrouted path must not be retried")
+        self.assertFalse(r.ok)
+        self.assertEqual(r.receipt.verdict, "unrouted")
+        self.assertEqual(r.receipt.error_name, "UNROUTED_PATH")
+        self.assertIn("NOT retried", r.receipt.note)
+
+    def test_receipt_explains_the_decision(self):
+        def transport(url, headers):
+            return 200, dict(self.UNROUTED_BODY)
+
+        c = CmcClient(transport=transport, min_interval_s=0.0)
+        r = c.get("cmc20_historical", interval="daily", count=10)
+        self.assertIn("UNROUTED", r.receipt.note)
+        self.assertIn("not exist", r.receipt.note)
+
+    def test_is_unrouted_tolerates_a_non_dict_body(self):
+        """A transport that hands back raw text must not crash the classifier."""
+        for junk in ("not json at all", None, 42, []):
+            with self.subTest(body=repr(junk)):
+                self.assertFalse(is_unrouted(junk))
 
 
 class TestGapRendering(unittest.TestCase):
